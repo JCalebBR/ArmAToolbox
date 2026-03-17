@@ -193,11 +193,10 @@ class ATBX_OT_p3d_batch_export(bpy.types.Operator): #, ExportHelper):
             config = context.scene.armaExportConfigs.exportConfigs[item.name]
             fileName = path.join(self.directory, config.fileName)
             try:
-                filePtr = open(fileName, "wb")
-                context.view_layer.objects.active = objs[0]
-                MDLExporter.exportObjectListAsMDL(self, filePtr, self.applyModifiers, True, objs,
-                                      self.renumberComponents, self.applyTransforms, config.originObject)
-                filePtr.close()
+                with open(fileName, "wb") as filePtr:
+                    context.view_layer.objects.active = objs[0]
+                    MDLExporter.exportObjectListAsMDL(self, filePtr, self.applyModifiers, True, objs,
+                                        self.renumberComponents, self.applyTransforms, config.originObject)
                 ArmaTools.RunO2Script(context, fileName)
             except Exception as inst:
                 print(inst)

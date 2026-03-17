@@ -107,87 +107,90 @@ def getMotionVector(context, boneName, firstKf, lastKf):
     return v
 
 def exportRTM(context, keyframeList, filepath="", staticPose=False, clipFrames=True):
-    filePtr = open(filepath, "wb")
-    
-    blendObject = context.object
-    armature = blendObject.data
-    scene = context.scene
+    try:
+        with open(filepath, "wb") as filePtr:
+            blendObject = context.object
+            armature = blendObject.data
+            scene = context.scene
 
-    startFrame = scene.frame_start
-    endFrame = scene.frame_end
+            startFrame = scene.frame_start
+            endFrame = scene.frame_end
 
-    keyframeList.sort()
-    keyframeList = list(set(keyframeList))
-    
-    if clipFrames:
-        k = []
-        for x in keyframeList:
-            if x >= startFrame and x <= endFrame:
-                k.append(x)
-        keyframeList = k
-    
-    # Check if there are any keyframes, if not, enforce staticPose
-    if blendObject.animation_data is None:
-        staticPose = True
-    
-    # Find our bone names
-    boneNames = []
-    
-    for bone in armature.bones:
-        if len(bone.name)>0:
-            if bone.name[0] != '@' and bone.name[-1] != '@':
-                boneNames.append(bone.name)
+            keyframeList.sort()
+            keyframeList = list(set(keyframeList))
+            
+            if clipFrames:
+                k = []
+                for x in keyframeList:
+                    if x >= startFrame and x <= endFrame:
+                        k.append(x)
+                keyframeList = k
+            
+            # Check if there are any keyframes, if not, enforce staticPose
+            if blendObject.animation_data is None:
+                staticPose = True
+            
+            # Find our bone names
+            boneNames = []
+            
+            for bone in armature.bones:
+                if len(bone.name)>0:
+                    if bone.name[0] != '@' and bone.name[-1] != '@':
+                        boneNames.append(bone.name)
 
 
-    # At this point we're ready to start writing
-    # Signature
-    writeSignature(filePtr, "RTM_0101")
-    
-    # Movement vector
-    if staticPose:
-        # Static pose has no motion
-        writeFloat(filePtr, 0)
-        writeFloat(filePtr, 0)
-        writeFloat(filePtr, 0)
-    elif len(blendObject.armaObjProps.centerBone) == 0:
-        # With no center bone selected, write the motion vector 
-        vector = blendObject.armaObjProps.motionVector
-        writeFloat(filePtr, vector[0])
-        writeFloat(filePtr, vector[2])
-        writeFloat(filePtr, vector[1])
-    else:
-        # With a bone selected, calculate the real motion vector
-        boneName = blendObject.armaObjProps.centerBone
-        vector = getMotionVector(context, boneName, keyframeList[0], keyframeList[-1])
-        writeFloat(filePtr, vector[0])
-        writeFloat(filePtr, vector[1])
-        writeFloat(filePtr, vector[2])
-    
-    # number of frames and number of bones
-    if staticPose:
-        writeULong(filePtr, 2)
-    else:
-        writeULong(filePtr, len(keyframeList))
-        
-    writeULong(filePtr, len(boneNames))
-    
-    # Write out the bone names
-    for boneName in boneNames:
-        writeBone(filePtr, boneName)
-    keyframeList = sorted(keyframeList)
-    if not staticPose:    
-        ############################
-        # Start writing RTM Frames
-        # for a non-static animation
-        for keyframe in keyframeList:
-            scene.frame_set(keyframe)
-            writeRTMFrame(filePtr, boneNames, blendObject, keyframe, RTMFrameTime(keyframe, startFrame, endFrame)) 
-    else:
-        ############################
-        # Wrtie out the current pose
-        # as a static pose
-        writeRTMFrame(filePtr, boneNames, blendObject, 0, 0)
-        writeRTMFrame(filePtr, boneNames, blendObject, 1, 1)
-    
-    
-    filePtr.close()
+            # At this point we're ready to start writing
+            # Signature
+            writeSignature(filePtr, "RTM_0101")
+            
+            # Movement vector
+            if staticPose:
+                # Static pose has no motion
+                writeFloat(filePtr, 0)
+                writeFloat(filePtr, 0)
+                writeFloat(filePtr, 0)
+            elif len(blendObject.armaObjProps.centerBone) == 0:
+                # With no center bone selected, write the motion vector 
+                vector = blendObject.armaObjProps.motionVector
+                writeFloat(filePtr, vector[0])
+                writeFloat(filePtr, vector[2])
+                writeFloat(filePtr, vector[1])
+            else:
+                # With a bone selected, calculate the real motion vector
+                boneName = blendObject.armaObjProps.centerBone
+                vector = getMotionVector(context, boneName, keyframeList[0], keyframeList[-1])
+                writeFloat(filePtr, vector[0])
+                writeFloat(filePtr, vector[1])
+                writeFloat(filePtr, vector[2])
+            
+            # number of frames and number of bones
+            if staticPose:
+                writeULong(filePtr, 2)
+            else:
+                writeULong(filePtr, len(keyframeList))
+                
+            writeULong(filePtr, len(boneNames))
+            
+            # Write out the bone names
+            for boneName in boneNames:
+                writeBone(filePtr, boneName)
+            keyframeList = sorted(keyframeList)
+            if not staticPose:    
+                ############################
+                # Start writing RTM Frames
+                # for a non-static animation
+                for keyframe in keyframeList:
+                    scene.frame_set(keyframe)
+                    writeRTMFrame(filePtr, boneNames, blendObject, keyframe, RTMFrameTime(keyframe, startFrame, endFrame)) 
+            else:
+                ############################
+                # Wrtie out the current pose
+                # as a static pose
+                writeRTMFrame(filePtr, boneNames, blendObject, 0, 0)
+                writeRTMFrame(filePtr, boneNames, blendObject, 1, 1)
+            
+            
+            filePtr.close()
+    except Exception as e:
+        print("Error writing file " + filepath)
+        print(e)

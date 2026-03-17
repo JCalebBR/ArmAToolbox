@@ -28,58 +28,60 @@ def vertIdx(x,y,ncols, nrows):
     return y*ncols + x
 
 def importASC(context, fileName):
-    filePtr = open(fileName, "rb")
-    objName = path.basename(fileName).split(".")[0]
-    
-    # This isn't very flexible (yet). No idea if there can be comments in ASC DEM files
-    # expect the ncols/nrows etc at the beginning
-    
-    line = filePtr.readline()
-    ncols = int(expectKeyword(line, "ncols"))
-    if ncols == -1:
-        return -1
-    
-    line = filePtr.readline()
-    nrows = int(expectKeyword(line, "nrows"))
-    if nrows == -1:
-        return -1
+    try:
+        with open(fileName, "rb") as filePtr:
+            objName = path.basename(fileName).split(".")[0]
+            
+            # This isn't very flexible (yet). No idea if there can be comments in ASC DEM files
+            # expect the ncols/nrows etc at the beginning
+            
+            line = filePtr.readline()
+            ncols = int(expectKeyword(line, "ncols"))
+            if ncols == -1:
+                return -1
+            
+            line = filePtr.readline()
+            nrows = int(expectKeyword(line, "nrows"))
+            if nrows == -1:
+                return -1
 
 
-    
-    line = filePtr.readline()
-    xllcorner = expectKeyword(line, "xllcorner")
-    if xllcorner == -1:
-        return -1
+            
+            line = filePtr.readline()
+            xllcorner = expectKeyword(line, "xllcorner")
+            if xllcorner == -1:
+                return -1
 
 
-    line = filePtr.readline()
-    yllcorner = expectKeyword(line, "yllcorner")
-    if yllcorner == -1:
-        return -1   
-    
-    line = filePtr.readline()
-    cellsize = expectKeyword(line, "cellsize")
-    if cellsize == -1:
+            line = filePtr.readline()
+            yllcorner = expectKeyword(line, "yllcorner")
+            if yllcorner == -1:
+                return -1   
+            
+            line = filePtr.readline()
+            cellsize = expectKeyword(line, "cellsize")
+            if cellsize == -1:
+                return -1
+            
+            line = filePtr.readline()
+            nodata = expectKeyword(line, "NODATA_value")
+            
+            #print("debug: size = " , nrows, "x", ncols, " cellsize ", cellsize , "corner at ", xllcorner, ",", yllcorner)
+            
+            # read the height field data
+            verts = []
+            for y in range(0,nrows):
+                line = filePtr.readline()
+                line = line.decode("utf-8")
+                vals = line.split(" ")
+                for x in range(0,ncols):
+                    f = float(vals [x])
+                    point = [(x*cellsize)/100,((nrows-1-y)*cellsize/100), f/100]
+                    verts.append (point)
+    except Exception as e:
+        print("Error reading file " + fileName)
+        print(e)
         return -1
-    
-    line = filePtr.readline()
-    nodata = expectKeyword(line, "NODATA_value")
-    
-    #print("debug: size = " , nrows, "x", ncols, " cellsize ", cellsize , "corner at ", xllcorner, ",", yllcorner)
-    
-    # read the height field data
-    verts = []
-    for y in range(0,nrows):
-        line = filePtr.readline()
-        line = line.decode("utf-8")
-        vals = line.split(" ")
-        for x in range(0,ncols):
-            f = float(vals [x])
-            point = [(x*cellsize)/100,((nrows-1-y)*cellsize/100), f/100]
-            verts.append (point)
-    
-    filePtr.close()
-    
     faces = []
     # Create the triangulation
     for y in range(0,nrows-1):

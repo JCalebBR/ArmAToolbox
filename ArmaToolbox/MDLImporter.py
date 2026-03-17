@@ -74,18 +74,6 @@ def maybeAddEdgeSplit(obj):
     else:
         pass
 
-
-    #modifier = obj.modifiers.get("FHQ_ARMA_Toolbox_EdgeSplit")
-    #if modifier is None:
-    #    modifier = obj.modifiers.new("FHQ_ARMA_Toolbox_EdgeSplit",
-    #             type='EDGE_SPLIT')
-    #    
-    #    modifier.show_expanded = False
-    #    modifier.use_edge_angle = False # Want only sharp edges
-    #    modifier.use_edge_sharp = True
-
-    #obj.data.show_edge_sharp = True
-
 def correctedResolution(r):
     res = int(r)
    
@@ -238,391 +226,395 @@ def decodeWeight(b):
         return 1.0 #TODO: Correct?
 
 def loadLOD(context, filePtr, objectName, materialData, layerFlag, lodnr):
-    global objectLayers
-    meshName = objectName
-    weightArray = []
-    # Check for P3DM signature
-    sig = readSignature(filePtr)
-    if sig != b'P3DM':
-        return -1
-    
-    # Read major and minor version
-    major = readULong(filePtr)
-    minor = readULong(filePtr)
-    if major != 0x1c:
-        print("Unknown major version {0}".format(major))
-        return -1
-    if minor != 0x100:
-        print("Unknown minor version {0}".format(minor))
-        return -1
-    
-    numPoints   = readULong(filePtr)
-    numNormals  = readULong(filePtr)
-    numFaces    = readULong(filePtr)
-    print("read lod")
-    dummyFlags  = readULong(filePtr)
-    
-    # Read the Points. Points are XYZTriples followed by an ULONG flags word
-    verts = []
-    for i in range(0, numPoints):
-        point = struct.unpack("fffi", filePtr.read(16))
-        pnt = [point[0],  point[2], point[1]]
-        verts.append(pnt)
-    
-    print("normals (",numNormals, ")...")    
-    normals = []
-    for i in range(0, numNormals):
-        normal = struct.unpack("fff", filePtr.read(12))
-        nrm = [normal[0], normal[1], normal[2]]
-        normals.append(normal)
-        #print ("Normal = ", normal)
-    
+    try:
+        global objectLayers
+        meshName = objectName
+        weightArray = []
+        # Check for P3DM signature
+        sig = readSignature(filePtr)
+        if sig != b'P3DM':
+            return -1
+        
+        # Read major and minor version
+        major = readULong(filePtr)
+        minor = readULong(filePtr)
+        if major != 0x1c:
+            print("Unknown major version {0}".format(major))
+            return -1
+        if minor != 0x100:
+            print("Unknown minor version {0}".format(minor))
+            return -1
+        
+        numPoints   = readULong(filePtr)
+        numNormals  = readULong(filePtr)
+        numFaces    = readULong(filePtr)
+        print("read lod")
+        dummyFlags  = readULong(filePtr)
+        
+        # Read the Points. Points are XYZTriples followed by an ULONG flags word
+        verts = []
+        for i in range(0, numPoints):
+            point = struct.unpack("fffi", filePtr.read(16))
+            pnt = [point[0],  point[2], point[1]]
+            verts.append(pnt)
+        
+        print("normals (",numNormals, ")...")    
+        normals = []
+        for i in range(0, numNormals):
+            normal = struct.unpack("fff", filePtr.read(12))
+            nrm = [normal[0], normal[1], normal[2]]
+            normals.append(normal)
+            #print ("Normal = ", normal)
+        
 
-    faceData = []
-    faces = []
-    print("faces...")
-    # Start reading and adding faces
-    for i in range(0, numFaces):
-        numSides = readULong(filePtr)
-        # Vertex table
-        vIdx = []
-        nrmIdx = []
-        uvs = []
-        for n in range(0, 4):
-            vtable = struct.unpack("iiff", filePtr.read(16))
-            if n<numSides:
-                vIdx.append(vtable[0])
-                nrmIdx.append(vtable[1])
-                uvs.append( [vtable[2], vtable[3]])
-        faceFlags = readULong(filePtr)
-        textureName = readString(filePtr)
-        materialName = readString(filePtr)
-        faceData.append(
-            (numSides, nrmIdx, uvs, faceFlags, textureName, materialName)
-        )
-        faces.append(vIdx)
-        # Handle the material if it doesn't exists yet
-        if len(textureName) > 0 or  len(materialName)>0:
-            try:
-                materialData[(textureName, materialName)]
-            except:
-                # Need to create a new material for this
-                #mat =  bpy.data.materials.new("Arma Material")
-                mat = bpy.data.materials.new(path.basename(textureName) + " :: " + path.basename(materialName))
-                mat.armaMatProps.colorString = textureName
-                mat.armaMatProps.rvMat   = materialName
-                if len(textureName) > 0 and textureName[0] == '#':
-                    mat.armaMatProps.texType = 'Custom'
+        faceData = []
+        faces = []
+        print("faces...")
+        # Start reading and adding faces
+        for i in range(0, numFaces):
+            numSides = readULong(filePtr)
+            # Vertex table
+            vIdx = []
+            nrmIdx = []
+            uvs = []
+            for n in range(0, 4):
+                vtable = struct.unpack("iiff", filePtr.read(16))
+                if n<numSides:
+                    vIdx.append(vtable[0])
+                    nrmIdx.append(vtable[1])
+                    uvs.append( [vtable[2], vtable[3]])
+            faceFlags = readULong(filePtr)
+            textureName = readString(filePtr)
+            materialName = readString(filePtr)
+            faceData.append(
+                (numSides, nrmIdx, uvs, faceFlags, textureName, materialName)
+            )
+            faces.append(vIdx)
+            # Handle the material if it doesn't exists yet
+            if len(textureName) > 0 or  len(materialName)>0:
+                try:
+                    materialData[(textureName, materialName)]
+                except:
+                    # Need to create a new material for this
+                    #mat =  bpy.data.materials.new("Arma Material")
+                    mat = bpy.data.materials.new(path.basename(textureName) + " :: " + path.basename(materialName))
                     mat.armaMatProps.colorString = textureName
-                else:
-                    mat.armaMatProps.texType = 'Texture'
-                    mat.armaMatProps.texture = textureName
-                    mat.armaMatProps.colorString = ""
-                    
-                materialData[(textureName, materialName)] = mat
-            
-    
-    if readSignature(filePtr) != b'TAGG':
-        print("No tagg signature")
-        return -1;
-    
-    # Create the mesh. Doing it here makes the named selections
-    # easier to read.
-    mymesh = bpy.data.meshes.new(name=meshName)
-    mymesh.from_pydata(verts, [], faces) 
-
-    mymesh.update(calc_edges = True)
-
-    obj = bpy.data.objects.new(meshName, mymesh)
-    
-    # TODO: Maybe add a "logical Collection" option that
-    # Collects all geometries, shadows, custom etc in a collection.
-
-    scn = bpy.context.scene
-
-    coll = bpy.data.collections.new(meshName)
-    context.scene.collection.children.link(coll)
-    coll.objects.link(obj)
-    
-    #NEIN! coll.hide_viewport = True
-    #scn.objects.link(obj)
-    #scn.objects.active = obj   
-    
-    # Build Edge database to make finding sharp edges easier
-    edgeDict = dict()
-    for edge in mymesh.edges:
-        v1 = edge.vertices[0]
-        v2 = edge.vertices[1]
-        if (v1 > v2): # Swap if out of order
-            temp = v2
-            v2 = v1
-            v1 = temp
-        #print(f"adding edge index {edge.index} as ({v1},{v2}) to edge dictionary")
-        edgeDict[(v1,v2)] = edge.index
-
-    print("taggs")    
-    loop = True
-    sharpEdges = None
-    weight = None
-    while loop:
-        active = readChar(filePtr)
-        tagName = readString(filePtr)
-        
-        numBytes = readULong(filePtr)
-        
-        #print ("tagg: ",tagName, " size ", numBytes)
-        
-        if active == b'\000':
-            if numBytes != 0:
-                filePtr.seek(numBytes, 1)
-        else:
-            if tagName == "#EndOfFile#":
-                loop = False
-            elif tagName == "#SharpEdges#":
-                # Read Sharp Edges
-                sharpEdges = []
-                for i in range(0,numBytes,8):
-                    n1 = readULong(filePtr)
-                    n2 = readULong(filePtr)
-                    sharpEdges.append([n1, n2])
-                # print ("sharp edges", sharpEdges)
-            elif tagName == "#Property#":
-                # Read named property
-                propName  = struct.unpack("64s", filePtr.read(64))[0].decode("utf-8")
-                propValue = struct.unpack("64s", filePtr.read(64))[0].decode("utf-8")
-                item = obj.armaObjProps.namedProps.add()
-                item.name=propName;
-                item.value=propValue
-            elif tagName == "#UVSet#":
-                id = readULong(filePtr)
-                layerName = "UVSet " + str(id)
-                if id == 0:
-                    # Name first layer "UVMap" so that there isn't any fuckups with uv sets
-                    layerName = "UVMap"
-                #print("adding UV set " + layerName)
-                mymesh.uv_layers.new(name=layerName)
-                layer = mymesh.uv_layers[-1]
-                index = 0
-                for faceIdx in range(0,numFaces):
-                    n = faceData[faceIdx][0]
-                    for x in range(0,n):
-                        u = readFloat(filePtr)
-                        v = readFloat(filePtr)
-                        layer.data[index].uv = [u,1 - v]
-                        index += 1
-            elif tagName == "#Mass#":
-                weightArray = []
-                weight = 0
-                for idx in range (0,numPoints):
-                    f = readFloat(filePtr)
-                    weightArray.append(f)
-                    weight += f
-            elif tagName.__len__() > 0 and tagName[0] == '#':
-                print("Unkown/Unsued tagg " + tagName)
-                print("Skipping " , numBytes , " bytes in file")
-                # System tag we don't read
-                filePtr.seek(numBytes, 1)
-            elif tagName.__len__() == 0:
-                print ("Unnamed tagg????")
-                filePtr.seek(numBytes, 1)
-            else:
-                # Named Selection
-                # Add a vertex group
-                # First, check the tagName for a proxy
-                newVGrp = True
-                if len(tagName) > 5:
-                    if tagName[:6] == "proxy:":
-                        newVGrp = False
-                        vgrp = obj.vertex_groups.new(name = "@@armaproxy")
-                        prp = obj.armaObjProps.proxyArray
-                        prx = tagName.split(":")[1]
-                        if prx.find(".") != -1:
-                            a = prx.split(".")
-                            prx = a[0]
-                            idx = a[-1]
-                            if len(idx) == 0:
-                                idx = "1"
-                        else:
-                            idx = "1"
-                        n = prp.add()
-                        n.name = vgrp.name
-                        n.index = int(idx)
-                        n.path = "P:" + prx
-                        tagName = "@@armyproxy"
+                    mat.armaMatProps.rvMat   = materialName
+                    if len(textureName) > 0 and textureName[0] == '#':
+                        mat.armaMatProps.texType = 'Custom'
+                        mat.armaMatProps.colorString = textureName
+                    else:
+                        mat.armaMatProps.texType = 'Texture'
+                        mat.armaMatProps.texture = textureName
+                        mat.armaMatProps.colorString = ""
+                        
+                    materialData[(textureName, materialName)] = mat
                 
-                if newVGrp == True:    
-                    vgrp = obj.vertex_groups.new(name = tagName)
-                for i in range(0, numPoints):
-                    b = readByte(filePtr)
-                    w = decodeWeight(b)
-                    if (w>0):
-                        vgrp.add([i],float(w),'REPLACE')
-                    #print("b = ",b,"w = ", w)
-                for i in range(0, numFaces):
-                    b = readByte(filePtr)
-                    w = decodeWeight(b)
-                    if w > 0.0: 
-                        pass
-                        #print("selection ", tagName, "b = ",b,"w = ", w)
-                #    if w== 1.0:
-                #        pPoly = obj.data.polygons[i]
-                #        for n in range(0,len(pPoly.vertices)):
-                #            idx = pPoly.vertices[n]
-                #            vgrp.add([idx], w, 'REPLACE')
-                #filePtr.seek(numFaces, 1)
-    
-    # Done with the taggs, only the resolution is left to read
-    resolution = readFloat(filePtr)
-
-    #meshName = meshName + "." + resolutionName(resolution)      
-    meshName = resolutionName(resolution)
-    mymesh.name = meshName
-    obj.name = meshName
-    coll.name = meshName
-
-    print("materials...")
-    indexData = {}
-    # Set up materials
-    for faceIdx in range(0,numFaces):
-        fd = faceData[faceIdx] 
-
-        textureName = fd[4]
-        materialName = fd[5]
-
-        try:
-            mat = materialData[(textureName, materialName)]
-            # Add the material if it isn't in
-            if mat.name not in mymesh.materials:
-                mymesh.materials.append(mat)
-                thisMatIndex = len(mymesh.materials)-1
-                indexData[mat] = thisMatIndex
-                #print("added new material at " + str(thisMatIndex))
-            else:
-                thisMatIndex = indexData [mat]
-                #print("old material " + str(thisMatIndex))
-                
-            mymesh.polygons[faceIdx].material_index = thisMatIndex
-        except:
-            pass
         
+        if readSignature(filePtr) != b'TAGG':
+            print("No tagg signature")
+            return -1;
         
-    print("sharp edges")
-    # Set sharp edges
-    #if sharpEdges is not None:
-    #    for edge in mymesh.edges:
-    #        v1 = edge.vertices[0]
-    #        v2 = edge.vertices[1]
-    #        if [v1,v2] in sharpEdges:
-    #            mymesh.edges[edge.index].use_edge_sharp = True
-    #        elif [v2,v1] in sharpEdges:
-    #            mymesh.edges[edge.index].use_edge_sharp = True
-    #        else: 
-    #            print(f"Edge pair {v1},{v2} not found in edges")
+        # Create the mesh. Doing it here makes the named selections
+        # easier to read.
+        mymesh = bpy.data.meshes.new(name=meshName)
+        mymesh.from_pydata(verts, [], faces) 
 
-    # New Code
-    if sharpEdges is not None:
-        for sharpEdge in sharpEdges:
-            v1 = sharpEdge[0]
-            v2 = sharpEdge[1]
+        mymesh.update(calc_edges = True)
+
+        obj = bpy.data.objects.new(meshName, mymesh)
+        
+        # TODO: Maybe add a "logical Collection" option that
+        # Collects all geometries, shadows, custom etc in a collection.
+
+        scn = bpy.context.scene
+
+        coll = bpy.data.collections.new(meshName)
+        context.scene.collection.children.link(coll)
+        coll.objects.link(obj)
+        
+        #NEIN! coll.hide_viewport = True
+        #scn.objects.link(obj)
+        #scn.objects.active = obj   
+        
+        # Build Edge database to make finding sharp edges easier
+        edgeDict = dict()
+        for edge in mymesh.edges:
+            v1 = edge.vertices[0]
+            v2 = edge.vertices[1]
             if (v1 > v2): # Swap if out of order
                 temp = v2
                 v2 = v1
                 v1 = temp
-            try: # Apparently, some models have sharp edges that (no longer) exist.
-                idx = edgeDict[(v1,v2)]
-                mymesh.edges[idx].use_edge_sharp = True
+            #print(f"adding edge index {edge.index} as ({v1},{v2}) to edge dictionary")
+            edgeDict[(v1,v2)] = edge.index
+
+        print("taggs")    
+        loop = True
+        sharpEdges = None
+        weight = None
+        while loop:
+            active = readChar(filePtr)
+            tagName = readString(filePtr)
+            
+            numBytes = readULong(filePtr)
+            
+            #print ("tagg: ",tagName, " size ", numBytes)
+            
+            if active == b'\000':
+                if numBytes != 0:
+                    filePtr.seek(numBytes, 1)
+            else:
+                if tagName == "#EndOfFile#":
+                    loop = False
+                elif tagName == "#SharpEdges#":
+                    # Read Sharp Edges
+                    sharpEdges = []
+                    for i in range(0,numBytes,8):
+                        n1 = readULong(filePtr)
+                        n2 = readULong(filePtr)
+                        sharpEdges.append([n1, n2])
+                    # print ("sharp edges", sharpEdges)
+                elif tagName == "#Property#":
+                    # Read named property
+                    propName  = struct.unpack("64s", filePtr.read(64))[0].decode("utf-8")
+                    propValue = struct.unpack("64s", filePtr.read(64))[0].decode("utf-8")
+                    item = obj.armaObjProps.namedProps.add()
+                    item.name=propName;
+                    item.value=propValue
+                elif tagName == "#UVSet#":
+                    id = readULong(filePtr)
+                    layerName = "UVSet " + str(id)
+                    if id == 0:
+                        # Name first layer "UVMap" so that there isn't any fuckups with uv sets
+                        layerName = "UVMap"
+                    #print("adding UV set " + layerName)
+                    mymesh.uv_layers.new(name=layerName)
+                    layer = mymesh.uv_layers[-1]
+                    index = 0
+                    for faceIdx in range(0,numFaces):
+                        n = faceData[faceIdx][0]
+                        for x in range(0,n):
+                            u = readFloat(filePtr)
+                            v = readFloat(filePtr)
+                            layer.data[index].uv = [u,1 - v]
+                            index += 1
+                elif tagName == "#Mass#":
+                    weightArray = []
+                    weight = 0
+                    for idx in range (0,numPoints):
+                        f = readFloat(filePtr)
+                        weightArray.append(f)
+                        weight += f
+                elif tagName.__len__() > 0 and tagName[0] == '#':
+                    print("Unkown/Unsued tagg " + tagName)
+                    print("Skipping " , numBytes , " bytes in file")
+                    # System tag we don't read
+                    filePtr.seek(numBytes, 1)
+                elif tagName.__len__() == 0:
+                    print ("Unnamed tagg????")
+                    filePtr.seek(numBytes, 1)
+                else:
+                    # Named Selection
+                    # Add a vertex group
+                    # First, check the tagName for a proxy
+                    newVGrp = True
+                    if len(tagName) > 5:
+                        if tagName[:6] == "proxy:":
+                            newVGrp = False
+                            vgrp = obj.vertex_groups.new(name = "@@armaproxy")
+                            prp = obj.armaObjProps.proxyArray
+                            prx = tagName.split(":")[1]
+                            if prx.find(".") != -1:
+                                a = prx.split(".")
+                                prx = a[0]
+                                idx = a[-1]
+                                if len(idx) == 0:
+                                    idx = "1"
+                            else:
+                                idx = "1"
+                            n = prp.add()
+                            n.name = vgrp.name
+                            n.index = int(idx)
+                            n.path = "P:" + prx
+                            tagName = "@@armyproxy"
+                    
+                    if newVGrp == True:    
+                        vgrp = obj.vertex_groups.new(name = tagName)
+                    for i in range(0, numPoints):
+                        b = readByte(filePtr)
+                        w = decodeWeight(b)
+                        if (w>0):
+                            vgrp.add([i],float(w),'REPLACE')
+                        #print("b = ",b,"w = ", w)
+                    for i in range(0, numFaces):
+                        b = readByte(filePtr)
+                        w = decodeWeight(b)
+                        if w > 0.0: 
+                            pass
+                            #print("selection ", tagName, "b = ",b,"w = ", w)
+                    #    if w== 1.0:
+                    #        pPoly = obj.data.polygons[i]
+                    #        for n in range(0,len(pPoly.vertices)):
+                    #            idx = pPoly.vertices[n]
+                    #            vgrp.add([idx], w, 'REPLACE')
+                    #filePtr.seek(numFaces, 1)
+        
+        # Done with the taggs, only the resolution is left to read
+        resolution = readFloat(filePtr)
+
+        #meshName = meshName + "." + resolutionName(resolution)      
+        meshName = resolutionName(resolution)
+        mymesh.name = meshName
+        obj.name = meshName
+        coll.name = meshName
+
+        print("materials...")
+        indexData = {}
+        # Set up materials
+        for faceIdx in range(0,numFaces):
+            fd = faceData[faceIdx] 
+
+            textureName = fd[4]
+            materialName = fd[5]
+
+            try:
+                mat = materialData[(textureName, materialName)]
+                # Add the material if it isn't in
+                if mat.name not in mymesh.materials:
+                    mymesh.materials.append(mat)
+                    thisMatIndex = len(mymesh.materials)-1
+                    indexData[mat] = thisMatIndex
+                    #print("added new material at " + str(thisMatIndex))
+                else:
+                    thisMatIndex = indexData [mat]
+                    #print("old material " + str(thisMatIndex))
+                    
+                mymesh.polygons[faceIdx].material_index = thisMatIndex
             except:
-                print(f"WARNING: Edge {v1},{v2} does not exist")
+                pass
+            
+            
+        print("sharp edges")
+        # Set sharp edges
+        #if sharpEdges is not None:
+        #    for edge in mymesh.edges:
+        #        v1 = edge.vertices[0]
+        #        v2 = edge.vertices[1]
+        #        if [v1,v2] in sharpEdges:
+        #            mymesh.edges[edge.index].use_edge_sharp = True
+        #        elif [v2,v1] in sharpEdges:
+        #            mymesh.edges[edge.index].use_edge_sharp = True
+        #        else: 
+        #            print(f"Edge pair {v1},{v2} not found in edges")
 
-    #for pair in sharpEdges:
-    #    p1 = pair[0]
-    #    p2 = pair[1]
-    #    edge = mymesh.edges.get([mymesh.vertices[p1], mymesh.vertices[p2]])
-    #    print("edge = ", edge)
-    #    #if edge != None:
-    #    #    edge.use_edge_sharp = True
+        # New Code
+        if sharpEdges is not None:
+            for sharpEdge in sharpEdges:
+                v1 = sharpEdge[0]
+                v2 = sharpEdge[1]
+                if (v1 > v2): # Swap if out of order
+                    temp = v2
+                    v2 = v1
+                    v1 = temp
+                try: # Apparently, some models have sharp edges that (no longer) exist.
+                    idx = edgeDict[(v1,v2)]
+                    mymesh.edges[idx].use_edge_sharp = True
+                except:
+                    print(f"WARNING: Edge {v1},{v2} does not exist")
 
-    # TODO: This causes faces with the same vertices but different normals to
-    # be discarded. Don't want that
-    #mymesh.validate()
-    print("Normal calculation")
-    if (4,0,0) > bpy.app.version:
-        mymesh.calc_normals()
-    for poly in mymesh.polygons:
-        poly.use_smooth = True
+        #for pair in sharpEdges:
+        #    p1 = pair[0]
+        #    p2 = pair[1]
+        #    edge = mymesh.edges.get([mymesh.vertices[p1], mymesh.vertices[p2]])
+        #    print("edge = ", edge)
+        #    #if edge != None:
+        #    #    edge.use_edge_sharp = True
 
-    print("Add edge split")
-    maybeAddEdgeSplit(obj)
-    #scn.update()
-    obj.select_set(True)
-    
-    #if layerFlag == True:
-    #    # Move to layer
-    #    objectLayers = getLayerMask(lodnr)
-    #    bpy.ops.object.move_to_layer(layers=objectLayers)
+        # TODO: This causes faces with the same vertices but different normals to
+        # be discarded. Don't want that
+        #mymesh.validate()
+        print("Normal calculation")
+        if (4,0,0) > bpy.app.version:
+            mymesh.calc_normals()
+        for poly in mymesh.polygons:
+            poly.use_smooth = True
 
-    hasSet = False
-    #oldres = resolution
-    resolution,offset = correctedResolution(resolution)
-    #offset = oldres - resolution
-    #print("resolution = ",resolution, " oldres = ", oldres, "offset = ", offset)
-    obj.armaObjProps.isArmaObject = True
-    if resolution <= 1000:
-        obj.armaObjProps.lodDistance = resolution
-        hasSet = True
-    else:
-        obj.armaObjProps.lodDistance = offset #0.0
+        print("Add edge split")
+        maybeAddEdgeSplit(obj)
+        #scn.update()
+        obj.select_set(True)
+        
+        #if layerFlag == True:
+        #    # Move to layer
+        #    objectLayers = getLayerMask(lodnr)
+        #    bpy.ops.object.move_to_layer(layers=objectLayers)
 
-    print("set LOD type")    
-    # Set the right LOD type
-    lodPresets = properties.lodPresets
-    
-    for n in lodPresets:
-        if float(n[0]) == resolution:
-            obj.armaObjProps.lod = n[0]
+        hasSet = False
+        #oldres = resolution
+        resolution,offset = correctedResolution(resolution)
+        #offset = oldres - resolution
+        #print("resolution = ",resolution, " oldres = ", oldres, "offset = ", offset)
+        obj.armaObjProps.isArmaObject = True
+        if resolution <= 1000:
+            obj.armaObjProps.lodDistance = resolution
             hasSet = True
-             
-    if hasSet == False:
-        print("Error: unknown lod %f" % (resolution))
-        #print("resolution %d" % (correctedResolution(resolution)))
+        else:
+            obj.armaObjProps.lodDistance = offset #0.0
 
-    print("weight")
-    if weight is not None:
-        obj.armaObjProps.mass = weight
-    
-    if len(weightArray) > 0:
+        print("set LOD type")    
+        # Set the right LOD type
+        lodPresets = properties.lodPresets
+        
+        for n in lodPresets:
+            if float(n[0]) == resolution:
+                obj.armaObjProps.lod = n[0]
+                hasSet = True
+                
+        if hasSet == False:
+            print("Error: unknown lod %f" % (resolution))
+            #print("resolution %d" % (correctedResolution(resolution)))
+
+        print("weight")
+        if weight is not None:
+            obj.armaObjProps.mass = weight
+        
+        if len(weightArray) > 0:
+            bm = bmesh.new()
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            
+            weight_layer = bm.verts.layers.float.new('FHQWeights')
+            weight_layer = bm.verts.layers.float['FHQWeights']
+            print(weight_layer)
+            for i in range(0,len(weightArray)):    
+                bm.verts[i][weight_layer] = weightArray[i]
+            
+            bm.to_mesh(obj.data)
+        
+        print("face flags")
         bm = bmesh.new()
         bm.from_mesh(obj.data)
         bm.verts.ensure_lookup_table()
-        
-        weight_layer = bm.verts.layers.float.new('FHQWeights')
-        weight_layer = bm.verts.layers.float['FHQWeights']
-        print(weight_layer)
-        for i in range(0,len(weightArray)):    
-            bm.verts[i][weight_layer] = weightArray[i]
-        
+        fflayer = ArmaTools.getBMeshFaceFlags(bm)
+        for face in bm.faces:
+            face[fflayer] = faceData[face.index][3]
         bm.to_mesh(obj.data)
-    
-    print("face flags")
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    bm.verts.ensure_lookup_table()
-    fflayer = ArmaTools.getBMeshFaceFlags(bm)
-    for face in bm.faces:
-        face[fflayer] = faceData[face.index][3]
-    bm.to_mesh(obj.data)
 
-    obj.select_set(False)
-    
-    if obj.armaObjProps.lod == '1.000e+13' or obj.armaObjProps.lod == '4.000e+13':
-        ArmaTools.attemptFixMassLod (obj)
+        obj.select_set(False)
+        
+        if obj.armaObjProps.lod == '1.000e+13' or obj.armaObjProps.lod == '4.000e+13':
+            ArmaTools.attemptFixMassLod (obj)
 
-    if obj.armaObjProps.lod == '-1.0':
-        ArmaTools.PostProcessLOD(obj)
+        if obj.armaObjProps.lod == '-1.0':
+            ArmaTools.PostProcessLOD(obj)
 
-    print("done reading lod")
-    #bpy.ops.outliner.collection_disable()
-    return 0
+        print("done reading lod")
+        #bpy.ops.outliner.collection_disable()
+        return 0
+    except Exception as e:
+        print("Error reading lod")
+        print(e)
 
 # Main Import Routine
 def importMDL(context, fileName, layerFlag):
@@ -633,32 +625,35 @@ def importMDL(context, fileName, layerFlag):
                False, False, False, False, False]
     currentLayer = 0
     
-    filePtr = open(fileName, "rb")
-    
-    objName = path.basename(fileName).split(".")[0]
-
     # This is used to collect combinations of texture and rvmat
     # in order to generate Materials
     materialData = {}
-
-    # Read the header
-    sig = readSignature(filePtr)
-    version = readULong(filePtr)
-    numLods = readULong(filePtr)
     
-    print ("Signature = {0}, version={1}, numLods = {2}".format(sig, version, numLods))
+    objName = path.basename(fileName).split(".")[0]
     
-    if version != 257:
-        return -1
+    try:
+        with open(fileName, "rb") as filePtr:
+            # Read the header
+            sig = readSignature(filePtr)
+            version = readULong(filePtr)
+            numLods = readULong(filePtr)
+            
+            print ("Signature = {0}, version={1}, numLods = {2}".format(sig, version, numLods))
+        
+            if version != 257:
+                return -1
 
-    if sig != b'MLOD':
-        return -3
-    
-    # Start loading lods
-    for i in range(0,numLods):
-        if loadLOD(context, filePtr, objName, materialData, layerFlag, i) != 0:
-            return -2
+            if sig != b'MLOD':
+                return -3
+        
+            # Start loading lods
+            for i in range(0,numLods):
+                if loadLOD(context, filePtr, objName, materialData, layerFlag, i) != 0:
+                    return -2
 
-    filePtr.close()
-    ArmaTools.allButOneCollection(context)
-    return 0
+            ArmaTools.allButOneCollection(context)
+            return 0
+    except Exception as e:
+        print("Error reading file " + fileName)
+        print(e)
+        return -4
