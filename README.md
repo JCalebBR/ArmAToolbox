@@ -1,5 +1,3 @@
-/home/jcaleb/.local/share/Steam/steamapps/common/Arma 3 Tools/o2script_wrapper.sh
-
 # Latest News
 Release 4.0.5 has been updated. If you had trouble installing it, it should work now. Turns out I forgot to add the distribution archive :|
 
