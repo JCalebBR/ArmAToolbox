@@ -15,6 +15,7 @@ from . import (
     properties
 )
 import os.path as path
+import sys
 
 
 geometryLods = [
@@ -939,23 +940,27 @@ class ATBX_OT_p3d_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
                        ]
             for o in objects:
                 print("------" + o.name)
-            filePtr = open(self.filepath, "wb")
-            exportObjectListAsMDL(
-                self, filePtr, self.applyModifiers, self.mergeSameLOD, objects, self.renumberComponents, self.applyTransforms, None)
-            filePtr.close()
-
-            ArmaTools.RunO2Script(context, self.filepath)
+            try:
+                with open(self.filepath, "wb") as filePtr:
+                    exportObjectListAsMDL(
+                        self, filePtr, self.applyModifiers, self.mergeSameLOD, objects, self.renumberComponents, self.applyTransforms, None)
+                ArmaTools.RunO2Script(context, self.filepath)
+            except:
+                self.report({'ERROR'}, "Error writing file " + self.filepath +
+                            " for config " + self.config + ":" + str(sys.exc_info()[0]))
+                return {'CANCELLED'}
         elif self.config == "-2":
             #try:
             # Open the file and export
-            filePtr = open(self.filepath, "wb")
-            exportMDL(self, filePtr, False,
-                    self.applyModifiers, self.mergeSameLOD, self.renumberComponents, self.applyTransforms)
-            filePtr.close()
-
-            ArmaTools.RunO2Script(context, self.filepath)
-
-            
+            try:
+                with open(self.filepath, "wb") as filePtr:
+                    exportMDL(self, filePtr, False,
+                            self.applyModifiers, self.mergeSameLOD, self.renumberComponents, self.applyTransforms)
+                ArmaTools.RunO2Script(context, self.filepath)
+            except:
+                self.report({'ERROR'}, "Error writing file " + self.filepath +
+                            " for config " + self.config + ":" + str(sys.exc_info()[0]))
+                return {'CANCELLED'}
         else:
             print("Export config " + self.config)
             objs = ArmaTools.GetObjectsByConfig(self.config)
@@ -964,11 +969,10 @@ class ATBX_OT_p3d_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
             fileName = self.filepath
             print("  exporting to " + fileName)
             try:
-                filePtr = open(fileName, "wb")
-                context.view_layer.objects.active = objs[0]
-                exportObjectListAsMDL(
-                    self, filePtr, self.applyModifiers, True, objs, self.renumberComponents, self.applyTransforms, config.originObject)
-                filePtr.close()
+                with open(fileName, "wb") as filePtr:
+                    context.view_layer.objects.active = objs[0]
+                    exportObjectListAsMDL(
+                        self, filePtr, self.applyModifiers, True, objs, self.renumberComponents, self.applyTransforms, config.originObject)
                 ArmaTools.RunO2Script(context, fileName)
             except:
                 self.report({'ERROR'}, "Error writing file " + fileName +

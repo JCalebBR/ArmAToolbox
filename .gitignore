@@ -5,3 +5,5 @@ copy.bat
 .vscode
 __pycache__
 ArmaToolbox.zip
+ArmaToolbox-4.3.0.zip
+.gitignore

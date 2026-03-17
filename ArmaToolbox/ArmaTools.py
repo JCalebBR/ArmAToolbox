@@ -857,25 +857,74 @@ def GetObjectsByConfig(configName):
     return objects
 
 def RunO2Script(context, fileName):
-    # Write a temporary O2script file for this
-    filePtr = tempfile.NamedTemporaryFile("w", delete=False)
-    tmpName = filePtr.name
-    filePtr.write("p3d = newLodObject;\n")
-    filePtr.write('_res = p3d loadP3D "%s";\n' % (fileName))
-    filePtr.write("_res = p3d setActive 4e13;")
-    filePtr.write('save p3d;\n')
-    filePtr.close()
+    if os.name == 'nt':
+        # Write a temporary O2script file for this
+        filePtr = tempfile.NamedTemporaryFile("w", delete=False)
+        tmpName = filePtr.name
+        filePtr.write("p3d = newLodObject;\n")
+        filePtr.write('_res = p3d loadP3D "%s";\n' % (fileName))
+        filePtr.write("_res = p3d setActive 4e13;")
+        filePtr.write('save p3d;\n')
+        filePtr.close()
 
-    print(__package__)
-    print(__name__)
-    #user_preferences = context.preferences
-    #addon_prefs = user_preferences.addons["ArmaToolbox"].preferences
-    addon_prefs = bpy.context.preferences.addons[__package__].preferences
-    command = addon_prefs.o2ScriptProp
-    command = '"' + command + '" "' + tmpName + '"'
-    print("Running command ", command)
-    call(command, shell=True)
-    os.remove(tmpName)
+        print(__package__)
+        print(__name__)
+        #user_preferences = context.preferences
+        #addon_prefs = user_preferences.addons["ArmaToolbox"].preferences
+        addon_prefs = bpy.context.preferences.addons[__package__].preferences
+        command = addon_prefs.o2ScriptProp
+        command = '"' + command + '" "' + tmpName + '"'
+        print("Running command ", command)
+        call(command, shell=True)
+        os.remove(tmpName)
+    else:
+        # Linux compatibility
+        import subprocess
+        
+        # Translate the Linux path to a Windows path (Z:\home\...)
+        win_p3d_path = fileName
+        try:
+            win_p3d_path = subprocess.check_output(['winepath', '-w', fileName]).decode().strip()
+        except Exception as e:
+            print(f"ArmaToolbox Warning: Path conversion failed: {e}")
+
+        # Write a temporary O2script file
+        filePtr = tempfile.NamedTemporaryFile("w", delete=False)
+        tmpName = filePtr.name
+        
+        # Escape backslashes so the Windows O2Script engine parses it correctly
+        escaped_win_path = win_p3d_path.replace("\\", "\\\\")
+        
+        filePtr.write("p3d = newLodObject;\n")
+        filePtr.write('_res = p3d loadP3D "%s";\n' % (escaped_win_path))
+        filePtr.write("_res = p3d setActive 4e13;")
+        filePtr.write('save p3d;\n')
+        filePtr.close()
+
+        print(__package__)
+        print(__name__)
+        
+        addon_prefs = bpy.context.preferences.addons[__package__].preferences
+        command_path = addon_prefs.o2ScriptProp
+        
+        # Translate the temp script path to a Windows path
+        exec_tmpName = tmpName
+        try:
+            exec_tmpName = subprocess.check_output(['winepath', '-w', tmpName]).decode().strip()
+        except:
+            pass
+            
+        # Build the final command to call wrapper script
+        command = '"' + command_path + '" "' + exec_tmpName + '"'
+        print("Running Linux/Proton command: ", command)
+        
+        try:
+            call(command, shell=True)
+        except Exception as e:
+            print(f"ArmaToolbox: Execution Error: {e}")
+        finally:
+            if os.path.exists(tmpName):
+                os.remove(tmpName)
 
 def NeedsResolution(lod):
     lodPresetsNeedingResolution = [

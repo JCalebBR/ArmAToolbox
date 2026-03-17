@@ -59,7 +59,16 @@ def makeLodName(fileName, lodLevel):
     return lodName
 
 def maybeAddEdgeSplit(obj):
-    if (4,1,0) > bpy.app.version:
+    if bpy.app.version >= (4,1,0):
+        modifier = obj.modifiers.get("FHQ_ARMA_Toolbox_EdgeSplit")
+        if modifier is None:
+            modifier = obj.modifiers.new("FHQ_ARMA_Toolbox_EdgeSplit",
+                     type='EDGE_SPLIT')
+            
+            modifier.show_expanded = False
+            modifier.use_edge_angle = False # Want only sharp edges
+            modifier.use_edge_sharp = True
+    elif (4,1,0) > bpy.app.version:
         obj.data.use_auto_smooth = True
         obj.data.auto_smooth_angle = 3.1415927
     else:
