@@ -372,7 +372,7 @@ class ArmaToolboxProperties(bpy.types.PropertyGroup):
     # Config checkbox mirror for drag-selectable UI (synced with exportConfigs)
     configCheckboxes: bpy.props.CollectionProperty(
         type=ArmaToolboxConfigCheckboxProperty)
-
+    configCheckboxesIndex: bpy.props.IntProperty(default=-1) # <--- ADD THIS
     
 class ArmaToolboxMaterialProperties(bpy.types.PropertyGroup):
     texture : bpy.props.StringProperty(
@@ -606,6 +606,7 @@ class ArmaToolboxGUIProps(bpy.types.PropertyGroup):
     # Config checkbox mirror for drag-selectable batch UI (synced with bex_exportConfigs)
     bexConfigCheckboxes: bpy.props.CollectionProperty(
         type=ArmaToolboxBexConfigCheckboxProperty)
+    bexConfigCheckboxesIndex: bpy.props.IntProperty(default=-1) # <--- ADD THIS
 
 
 class ArmaToolboxCopyHelper(bpy.types.PropertyGroup):

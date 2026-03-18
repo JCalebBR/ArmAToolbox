@@ -819,13 +819,21 @@ class ATBX_PT_export_configs_batch_panel(bpy.types.Panel):
         row.prop(guiProps, "bex_applyAll", text = "Apply to everything")
 
         if guiProps.bex_applyAll == False and len(guiProps.bexConfigCheckboxes) > 0:
-            col = layout.box().column(align=True)
-            for item in guiProps.bexConfigCheckboxes:
-                col.prop(item, "checked", text=item.name)
+            row = layout.row()
+            row.template_list(
+                "ATBX_UL_config_checkboxes_list", "bex_list", 
+                guiProps, "bexConfigCheckboxes",
+                guiProps, "bexConfigCheckboxesIndex",
+                rows=6 # Height of the scroll box
+            )
 
         row = layout.row()
         row.operator("armatoolbox.apply_config_batch", text="Apply")
 
+class ATBX_UL_config_checkboxes_list(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        # This draws the checkbox and the name inside the scrolling list
+        layout.prop(item, "checked", text=item.name)
 
 class ATBX_PT_export_config_object_panel(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
@@ -862,9 +870,13 @@ class ATBX_PT_export_config_object_panel(bpy.types.Panel):
 
         if arma.alwaysExport == False:
             if len(arma.configCheckboxes) > 0:
-                col = layout.box().column(align=True)
-                for item in arma.configCheckboxes:
-                    col.prop(item, "checked", text=item.name)
+                row = layout.row()
+                row.template_list(
+                    "ATBX_UL_config_checkboxes_list", "",
+                    arma, "configCheckboxes",
+                    arma, "configCheckboxesIndex",
+                    rows=6 # Height of the scroll box
+                )
 
 class ATBX_PT_vgroup_maker_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
@@ -1074,6 +1086,7 @@ class ATBX_PT_meshcolletify_panel(bpy.types.Panel):
         row.operator("armatoolbox.meshcollectify", text="Meshcollectify")
 
 panel_classes = (
+    ATBX_UL_config_checkboxes_list,
     ATBX_PT_properties_panel,
     ATBX_PT_mesh_collector_panel,
     #ATBX_PT_named_selection_panel,
