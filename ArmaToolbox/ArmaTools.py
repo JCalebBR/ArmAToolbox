@@ -856,26 +856,60 @@ def GetObjectsByConfig(configName):
     print("Objects ", objects)
     return objects
 
-def RunO2Script(context, fileName):
-    # Write a temporary O2script file for this
-    filePtr = tempfile.NamedTemporaryFile("w", delete=False)
-    tmpName = filePtr.name
-    filePtr.write("p3d = newLodObject;\n")
-    filePtr.write('_res = p3d loadP3D "%s";\n' % (fileName))
-    filePtr.write("_res = p3d setActive 4e13;")
-    filePtr.write('save p3d;\n')
-    filePtr.close()
+def RunO2Script(context, fileNames):
+    # Make it accept either a single file string or a list of files
+    if isinstance(fileNames, str):
+        fileNames = [fileNames]
+        
+    # If the list is empty, just abort
+    if not fileNames:
+        return
 
-    print(__package__)
-    print(__name__)
-    #user_preferences = context.preferences
-    #addon_prefs = user_preferences.addons["ArmaToolbox"].preferences
+    # Linux Compatibility
+    is_linux = (os.name != 'nt')
+
+    with tempfile.NamedTemporaryFile("w", delete=False) as filePtr:
+        tmpName = filePtr.name
+        
+        # Loop through every file and write its instructions into the SAME script
+        for fileName in fileNames:
+            target_path = fileName
+            
+            if is_linux:
+                import subprocess
+                try:
+                    target_path = subprocess.check_output(['winepath', '-w', fileName]).decode().strip()
+                except Exception as e:
+                    print(f"ArmaToolbox Warning: Path conversion failed: {e}")
+
+            escaped_path = target_path.replace("\\", "\\\\")
+
+            filePtr.write("p3d = newLodObject;\n")
+            filePtr.write('_res = p3d loadP3D "%s";\n' % (escaped_path))
+            filePtr.write("_res = p3d setActive 4e13;\n") # Added \n here for safety
+            filePtr.write('save p3d;\n\n')
+
+    # ... (The rest of the execution block remains identical) ...
     addon_prefs = bpy.context.preferences.addons[__package__].preferences
-    command = addon_prefs.o2ScriptProp
-    command = '"' + command + '" "' + tmpName + '"'
-    print("Running command ", command)
-    call(command, shell=True)
-    os.remove(tmpName)
+    command_path = addon_prefs.o2ScriptProp
+    
+    exec_tmpName = tmpName
+    if is_linux:
+        try:
+            exec_tmpName = subprocess.check_output(['winepath', '-w', tmpName]).decode().strip()
+        except:
+            pass
+            
+    command = f'"{command_path}" "{exec_tmpName}"'
+    print("Running bulk O2Script command: ", command)
+    
+    try:
+        call(command, shell=True)
+    except Exception as e:
+        print(f"ArmaToolbox: Execution Error: {e}")
+    finally:
+        if os.path.exists(tmpName):
+            os.remove(tmpName)
 
 def NeedsResolution(lod):
     lodPresetsNeedingResolution = [

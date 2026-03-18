@@ -3,7 +3,7 @@ Created on 21.02.2014
 
 @author: hfrieden
 '''
-
+import numpy as np
 import bpy
 import bpy_extras
 import os
@@ -154,72 +154,156 @@ def OLDwriteNormals(filePtr, mesh, numberOfNormals):
 
 # FaceNormals must be inverted (-X, -Y, -Z) for clockwise vertex order (default for DirectX), and not changed for counterclockwise order.
 def writeNormals(filePtr, mesh, numberOfNormals):
-    print("faces = ", len(mesh.polygons))
     if (4,1,0) > bpy.app.version:
         mesh.calc_normals_split()
-    for poly in mesh.polygons:
-        #print("index = ", poly.index)
-        loops = poly.loop_indices
-        for l in loops:
-            normal = mesh.loops[l].normal
-            writeFloat(filePtr, -normal[0])
-            writeFloat(filePtr, -normal[1])
-            writeFloat(filePtr, -normal[2])
-            #print("normal = " , normal)
+        
+    total_loops = len(mesh.loops)
+    normals = np.empty(total_loops * 3, dtype=np.float32)
+    
+    mesh.loops.foreach_get("normal", normals)
+    
+    # Invert all normals instantly (-X, -Y, -Z)
+    normals = np.negative(normals)
+    
+    filePtr.write(normals.tobytes())
 
 def writeVertices(filePtr, mesh):
-    for v in mesh.vertices:
-        writeFloat(filePtr, v.co.x)
-        writeFloat(filePtr, v.co.z)
-        writeFloat(filePtr, v.co.y)
-        writeULong(filePtr, 0)
-
-
+    total_verts = len(mesh.vertices)
+    
+    # Get all X, Y, Z coords
+    coords = np.empty(total_verts * 3, dtype=np.float32)
+    mesh.vertices.foreach_get("co", coords)
+    
+    # Create an array of 0s for the flags
+    flags = np.zeros(total_verts, dtype=np.uint32)
+    
+    # Extract columns
+    x = coords[0::3]
+    y = coords[1::3]
+    z = coords[2::3]
+    
+    v_data = bytearray()
+    for i in range(total_verts):
+        v_data += struct.pack("<fffI", x[i], z[i], y[i], 0)
+        
+    filePtr.write(v_data)
 
 def writeFaces(filePtr, obj, mesh):
+    import numpy as np
+    
+    num_polys = len(mesh.polygons)
+    if num_polys == 0:
+        return
+
+    # Extract Geometry Data Instantly
+    loop_totals = np.empty(num_polys, dtype=np.int32)
+    loop_starts = np.empty(num_polys, dtype=np.int32)
+    mesh.polygons.foreach_get('loop_total', loop_totals)
+    mesh.polygons.foreach_get('loop_start', loop_starts)
+
+    if np.any(loop_totals > 4):
+        raise RuntimeError(f"Model {obj.name} contains n-gons and cannot be exported")
+
+    poly_verts = np.empty(len(mesh.loops), dtype=np.int32)
+    mesh.loops.foreach_get('vertex_index', poly_verts)
+
+    if mesh.uv_layers:
+        uvs = np.empty(len(mesh.loops) * 2, dtype=np.float32)
+        mesh.uv_layers[0].data.foreach_get('uv', uvs)
+        uv_u = uvs[0::2]
+        uv_v = 1.0 - uvs[1::2]
+    else:
+        uv_u = np.zeros(len(mesh.loops), dtype=np.float32)
+        uv_v = np.zeros(len(mesh.loops), dtype=np.float32)
+
+    # Extract BMesh Face Flags
     bm = bmesh.new()
     bm.from_mesh(obj.data)
     bm.faces.ensure_lookup_table()
     fflayer = ArmaTools.getBMeshFaceFlags(bm)
-
-    for idx,face in enumerate(mesh.polygons):
-        faceFlags = bm.faces[idx][fflayer]
-
-        if len(face.vertices) > 4:
-            raise RuntimeError("Model " + obj.name + " contains n-gons and cannot be exported")
-        materialName, textureName = getMaterialInfo(face, obj)
-        writeULong(filePtr, len(face.vertices))
-
-        # UV'S
-        uvs = []
-        for i1, loopindex in enumerate(face.loop_indices):
-            meshloop = mesh.loops[i1]
-            
-            try:
-                uv = mesh.uv_layers[0].data[loopindex].uv
-            except IndexError:
-                uv = [0,0]
-            uvs.append([uv[0], uv[1]])
-
-        for v in range(len(face.vertices)):
-            writeULong(filePtr, face.vertices[v]) # vert id
-            writeULong(filePtr, face.vertices[v]) # normal id
-            uv = uvs[v]
-            #print("u = ", uv[0], "v = ",uv[1])
-            uv[1] = 1 - uv[1]
-            writeFloat(filePtr, uv[0])
-            writeFloat(filePtr, uv[1])
-        
-        if len(face.vertices) == 3:
-            writeULong(filePtr, 0)
-            writeULong(filePtr, 0)
-            writeFloat(filePtr, 0.0)
-            writeFloat(filePtr, 0.0)
-        writeULong(filePtr, faceFlags)
-        writeString(filePtr, textureName)
-        writeString(filePtr, materialName)
-    
+    flags = np.array([f[fflayer] for f in bm.faces], dtype=np.uint32)
     bm.free()
+
+    # Calculate corner indices for all faces simultaneously
+    idx0 = loop_starts
+    idx1 = loop_starts + 1
+    idx2 = loop_starts + 2
+    is_quad = loop_totals == 4
+    idx3 = np.where(is_quad, loop_starts + 3, 0)
+
+    # Build the C-Struct Array for the entire mesh
+    dt = np.dtype([
+        ('n_verts', '<u4'),
+        ('v0', '<u4'), ('n0', '<u4'), ('u0', '<f4'), ('v0_uv', '<f4'),
+        ('v1', '<u4'), ('n1', '<u4'), ('u1', '<f4'), ('v1_uv', '<f4'),
+        ('v2', '<u4'), ('n2', '<u4'), ('u2', '<f4'), ('v2_uv', '<f4'),
+        ('v3', '<u4'), ('n3', '<u4'), ('u3', '<f4'), ('v3_uv', '<f4'),
+        ('flags', '<u4')
+    ])
+    
+    face_structs = np.empty(num_polys, dtype=dt)
+    face_structs['n_verts'] = loop_totals
+    
+    face_structs['v0'] = poly_verts[idx0]; face_structs['n0'] = poly_verts[idx0]
+    face_structs['u0'] = uv_u[idx0];       face_structs['v0_uv'] = uv_v[idx0]
+    
+    face_structs['v1'] = poly_verts[idx1]; face_structs['n1'] = poly_verts[idx1]
+    face_structs['u1'] = uv_u[idx1];       face_structs['v1_uv'] = uv_v[idx1]
+    
+    face_structs['v2'] = poly_verts[idx2]; face_structs['n2'] = poly_verts[idx2]
+    face_structs['u2'] = uv_u[idx2];       face_structs['v2_uv'] = uv_v[idx2]
+    
+    v3_vals = np.where(is_quad, poly_verts[idx3], 0)
+    face_structs['v3'] = v3_vals;          face_structs['n3'] = v3_vals
+    face_structs['u3'] = np.where(is_quad, uv_u[idx3], 0.0)
+    face_structs['v3_uv'] = np.where(is_quad, uv_v[idx3], 0.0)
+    
+    face_structs['flags'] = flags
+
+    geom_bytes = face_structs.tobytes()
+    geom_blocks = [geom_bytes[i*72:(i+1)*72] for i in range(num_polys)]
+
+    # Pre-Calculate Material Strings
+    mat_indices = np.empty(num_polys, dtype=np.int32)
+    mesh.polygons.foreach_get('material_index', mat_indices)
+
+    mat_strings = []
+    for slot in obj.material_slots:
+        material = slot.material
+        if material is None:
+            t_str, m_str = "#(argb,8,8,3)color(1,0,1,1)", ""
+        else:
+            texType = material.armaMatProps.texType
+            if texType == 'Texture':
+                t_str = stripAddonPath(material.armaMatProps.texture)
+            elif texType == 'Custom':
+                t_str = material.armaMatProps.colorString
+            elif texType == 'Color':
+                t_str = "#(argb,8,8,3)color({0:.3f},{1:.3f},{2:.3f},1.0,{3})".format( 
+                    material.armaMatProps.colorValue.r, 
+                    material.armaMatProps.colorValue.g, 
+                    material.armaMatProps.colorValue.b, 
+                    material.armaMatProps.colorType)
+            else:
+                t_str = ""
+            m_str = stripAddonPath(material.armaMatProps.rvMat)
+            
+        # Manually null-terminate
+        mat_strings.append(t_str.encode('ASCII') + b'\x00' + m_str.encode('ASCII') + b'\x00')
+        
+    fallback_bytes = b"#(argb,8,8,3)color(1,0,1,1)\x00\x00"
+    
+    # Interleave and Dump
+    final_blobs = []
+    for i in range(num_polys):
+        final_blobs.append(geom_blocks[i])
+        idx = mat_indices[i]
+        if 0 <= idx < len(mat_strings):
+            final_blobs.append(mat_strings[idx])
+        else:
+            final_blobs.append(fallback_bytes)
+            
+    filePtr.write(b"".join(final_blobs))
 
 def proxyPathStrip(pathName):
     if len(pathName) > 3:
@@ -294,38 +378,44 @@ def writeNamedSelections(filePtr, obj, mesh):
         selections[name] = set()
         selectionsFace[name] = set()
 
-    # We now go through all vertices and add their index to the appropriate groups
+    # Build a fast lookup dictionary: Vertex Index -> Set of Groups (with weight > 0)
+    vert_to_groups = [set() for _ in range(len(mesh.vertices))]
+
     print("named selections: Going through vertices")
     for vertex in mesh.vertices:
-        groups = vertex.groups
-        for group in groups:
+        for group in vertex.groups:
             name = obj.vertex_groups[group.group].name
             weight = group.weight
             selections[name].add((vertex.index, weight))
+            if weight > 0:
+                vert_to_groups[vertex.index].add(name)
 
-    # Now, collect face related weights. This can be either of two conditions:
-    # 1) The face is part of a Face Map
-    # 2) The vertices of this face have a weight greater than zero.
+    print("named selections: Going through faces")
+    # FAST INTERSECTION: A face belongs to a group if ALL its vertices share that group
     for face in mesh.polygons:
-        # This will get all the group indices in the current face
-        # Using a set will make sure they are unique
-        groups = set([grp.group for vert in face.vertices for grp in mesh.vertices[vert].groups])
-        for grpIdx in groups:
-            weight = ([grp.weight>0 for vert in face.vertices for grp in mesh.vertices[vert].groups if grp.group == grpIdx])
-            #print("weight = ",weight)
-            if len(weight) == len(face.vertices):
-                name = obj.vertex_groups[grpIdx].name
-                selectionsFace[name].add(face.index)
+        if not face.vertices:
+            continue
+            
+        # Start with the groups of the first vertex
+        common_groups = vert_to_groups[face.vertices[0]].copy()
+        
+        # Intersect with the remaining vertices
+        for vert_idx in face.vertices[1:]:
+            common_groups.intersection_update(vert_to_groups[vert_idx])
+            if not common_groups:
+                break # Early exit if no common groups remain
+                
+        for group_name in common_groups:
+            selectionsFace[group_name].add(face.index)
 
-    # At this point we can dump the array of groups into a file
     print("named selections: writing to disk")
     for name in selections:
         selName = fullNameIfProxy(obj, name)
-        print(name, "->", selName)
         writeByte(filePtr, 1)
         writeString(filePtr, selName)
         writeULong(filePtr, len(mesh.vertices) + len(mesh.polygons))
-        # Create a blob for the vertices and polygons
+        
+        # Create a blob for the vertices
         vertBlob = bytearray(len(mesh.vertices))
         verts = selections[name]
         for v in verts:
@@ -333,61 +423,50 @@ def writeNamedSelections(filePtr, obj, mesh):
             weight = convertWeight(v[1])
             vertBlob[idx] = weight
         writeBytes(filePtr, vertBlob)
-        # Polygons. TODO: use Face Map
+        
+        # Create a blob for the polygons
         polyBlob = bytearray(len(mesh.polygons))
         faces = selectionsFace[name]
         for f in faces:
             polyBlob[f] = 1
         writeBytes(filePtr, polyBlob)
+        
     print("named selections: done")
 
 def writeSharpEdges(filePtr, mesh):
-    # First, gather the edges of the flat shaded faces.
-    edges = [edge for face in mesh.polygons if not face.use_smooth for edge in face.edge_keys]
-    edges = sorted(set(edges))
     print("taggs: sharp edges - gather sharp edges")
-    ###
-    # OLD CODE - new code below
-    ###
-    # Gather the edges with the "sharp" flag set
-    #edges2 = [edge for edge in mesh.edges if edge.use_edge_sharp]
-    #print("taggs: sharp edges - find doubles")
-    # We need to go through the edges to find the doubles.
-    #for edge in edges2:
-    #    v1 = edge.vertices[0]
-    #    v2 = edge.vertices[1]
-    #    if not (v1, v2) in edges and not (v2, v1) in edges:
-    #        edges = edges + [(v1, v2)]
     
-    ###
-    # NEW CODE
-    ###
-    # ALternative approach: Insert the pairs of vertices into the edge list sorted, smallest index first
-    # Turn the list into a set to eliminate doubles
-    # turn it back into a list
+    # Use a Python Set to prevent duplicates.
+    edge_set = set()
+
+    # Gather edges from flat shaded faces
+    for face in mesh.polygons:
+        if not face.use_smooth:
+            for edge_key in face.edge_keys:
+                # edge_keys are already ordered (v1, v2) where v1 < v2
+                edge_set.add(edge_key)
+                
+    # Gather explicitly marked sharp edges
     for edge in mesh.edges:
         if edge.use_edge_sharp:
             v1 = edge.vertices[0]
             v2 = edge.vertices[1]
             if v1 < v2:
-                edges = edges + [(v1,v2)]
+                edge_set.add((v1, v2))
             else:
-                edges = edges + [(v2,v1)]
-    
-    edge_set = set(edges)
+                edge_set.add((v2, v1))
+
+    # Convert the unique set back to a list so we can write it to the file
     edges = list(edge_set)
 
-
     print("taggs: sharp edges - write them")
-    if (len(edges) > 0): # Only write this if we have sharp edges
+    if (len(edges) > 0):
         writeByte(filePtr, 1)
         writeString(filePtr, '#SharpEdges#')
         writeULong(filePtr, len(edges) * 2 * 4)
         for edge in edges:
             writeULong(filePtr, edge[0])
             writeULong(filePtr, edge[1])
-
-
 
 def writeMass(filePtr, obj, mesh):
     writeByte(filePtr, 1)
@@ -435,19 +514,27 @@ def writeNamedProperty(filePtr, name, value):
 def writeUVSet(filePtr, layer, mesh, obj, totalUVs, idx):
     writeByte(filePtr, 1)
     writeString(filePtr, "#UVSet#")
-    writeULong(filePtr, 4+totalUVs * 8)
+    writeULong(filePtr, 4 + totalUVs * 8)
     writeULong(filePtr, idx)
-    # Write UV Pairs
-    for i, polygon in enumerate(mesh.polygons):
-        for vertIdx, loopindex in enumerate(polygon.loop_indices):
-            meshloop = mesh.loops[vertIdx]
-            try:
-                uv = mesh.uv_layers[idx].data[loopindex].uv
-            except:
-                uv = [0,0]
-            uvPair = [uv[0],uv[1]]
-            writeFloat(filePtr, uvPair[0])
-            writeFloat(filePtr, 1-uvPair[1])
+    
+    if not mesh.uv_layers:
+        return
+
+    # Extract ALL UVs at once using NumPy
+    uv_data = mesh.uv_layers[idx].data
+    total_loops = len(mesh.loops)
+    
+    # Create empty numpy array
+    uvs = np.empty(total_loops * 2, dtype=np.float32)
+    
+    # Blender 3.0+ allows direct foreach_get into numpy arrays
+    uv_data.foreach_get("uv", uvs)
+    
+    # Flip the V coordinate (1.0 - V) in C using vector math
+    uvs[1::2] = 1.0 - uvs[1::2]
+    
+    # Write the entire array to disk instantly
+    filePtr.write(uvs.tobytes())
 
 def checkMass(obj, lod, mesh):
     # Check if the LOD is a geometry or physx, and add a dummy selection
@@ -546,7 +633,8 @@ def export_lod(filePtr, obj, wm, idx):
         print("Writing UV Set ", i)
         writeUVSet(filePtr, layer, mesh, obj, totalUVs, i)
     
-        
+    print("This is profiling!")
+
     # Close off the LOD
     writeByte(filePtr, True)
     writeString(filePtr, '#EndOfFile#')
@@ -927,7 +1015,9 @@ class ATBX_OT_p3d_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
         pass
 
     def execute(self, context):
-
+        print("Cleaning...")
+        bpy.data.orphans_purge(do_recursive=True)
+        print("Cleaned")
         if context.view_layer.objects.active == None:
             context.view_layer.objects.active = context.view_layer.objects[0]
         print("CONFIG: " + self.config)

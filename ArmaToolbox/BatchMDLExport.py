@@ -140,9 +140,8 @@ class ATBX_OT_p3d_batch_export(bpy.types.Operator): #, ExportHelper):
 
     directory : bpy.props.StringProperty(
         name="Outdir Path",
-        description="Where I will save my stuff"
-        # subtype='DIR_PATH' is not needed to specify the selection mode.
-        # But this will be anyway a directory path.
+        description="Where I will save my stuff",
+        subtype='DIR_PATH'
     )
 
     configs : bpy.props.CollectionProperty(
@@ -185,26 +184,50 @@ class ATBX_OT_p3d_batch_export(bpy.types.Operator): #, ExportHelper):
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        if context.view_layer.objects.active == None:
+        print("Cleaning...")
+        bpy.data.orphans_purge(do_recursive=True)
+        print("Cleaned")
+        import traceback 
+        
+        if context.view_layer.objects.active == None and len(context.view_layer.objects) > 0:
             context.view_layer.objects.active = context.view_layer.objects[0]
+            
+        # Create an empty list to track successfully exported models
+        exported_files = []
+            
         for item in self.configs:
             objs = ArmaTools.GetObjectsByConfig(item.name)
             print("Config: " + item.name)
+            
+            if not objs:
+                print(f"Warning: No objects found for config {item.name}, skipping.")
+                continue
+                
             config = context.scene.armaExportConfigs.exportConfigs[item.name]
             fileName = path.join(self.directory, config.fileName)
+            
             try:
-                filePtr = open(fileName, "wb")
-                context.view_layer.objects.active = objs[0]
-                MDLExporter.exportObjectListAsMDL(self, filePtr, self.applyModifiers, True, objs,
-                                      self.renumberComponents, self.applyTransforms, config.originObject)
-                filePtr.close()
-                ArmaTools.RunO2Script(context, fileName)
+                # Export the geometry directly from Blender
+                with open(fileName, "wb") as filePtr:
+                    context.view_layer.objects.active = objs[0]
+                    MDLExporter.exportObjectListAsMDL(self, filePtr, self.applyModifiers, True, objs,
+                                        self.renumberComponents, self.applyTransforms, config.originObject)
+                                        
+                # If successful, add to our bulk processing list instead of running Wine here
+                exported_files.append(fileName)
+                
             except Exception as inst:
-                print(inst)
-                str =  "Error writing file " + fileName + " for config " + item.name
-                self.report({'ERROR'}, str)
+                print(f"--- BATCH EXPORT CRASH ON {item.name} ---")
+                traceback.print_exc() 
+                error_msg = f"Error writing file {fileName} for config {item.name}"
+                self.report({'ERROR'}, error_msg)
                 return {'CANCELLED'}
         
+        # Once the loop is finished, hand the entire list to Wine at once
+        if exported_files:
+            print(f"Batch Exporting {len(exported_files)} files to O2Script...")
+            ArmaTools.RunO2Script(context, exported_files)
+            
         return {'FINISHED'}
 
     def draw(self, context):

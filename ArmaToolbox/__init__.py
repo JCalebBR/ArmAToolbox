@@ -8,7 +8,8 @@ bl_info = {
     "warning": '',
     "wiki_url": "https://github.com/AlwarrenSidh/ArmAToolbox/wiki",
     "tracker_url": "https://github.com/AlwarrenSidh/ArmAToolbox/issues",
-    "category": "3D View"}
+    "category": "3D View"
+}
 
 import sys, os
 #sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'ArmaToolbox'))
@@ -629,15 +630,23 @@ def register():
 
     if load_handler not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(load_handler)
-    bpy.types.DATA_PT_vertex_groups.append(vgroupExtra)
+    if hasattr(bpy.types, "MESH_PT_vertex_groups"):
+        bpy.types.MESH_PT_vertex_groups.append(vgroupExtra)
+    elif hasattr(bpy.types, "DATA_PT_vertex_groups"):
+        bpy.types.DATA_PT_vertex_groups.append(vgroupExtra)
     print("Register done")
 
 def unregister():
-    bpy.types.DATA_PT_vertex_groups.remove(vgroupExtra)
-    try:
-        del bpy.types.WindowManager.armatoolbox
-    except:
-        pass
+    if hasattr(bpy.types, "MESH_PT_vertex_groups"):
+        try:
+            bpy.types.MESH_PT_vertex_groups.remove(vgroupExtra)
+        except:
+            pass
+    elif hasattr(bpy.types, "DATA_PT_vertex_groups"):
+        try:
+            bpy.types.DATA_PT_vertex_groups.remove(vgroupExtra)
+        except:
+            pass
 
     bpy.app.handlers.load_post.remove(load_handler)
 
