@@ -818,19 +818,10 @@ class ATBX_PT_export_configs_batch_panel(bpy.types.Panel):
         row = layout.row()
         row.prop(guiProps, "bex_applyAll", text = "Apply to everything")
 
-        if context.scene.armaExportConfigs.exportConfigs.keys().__len__() != 0 and guiProps.bex_applyAll == False:
+        if guiProps.bex_applyAll == False and len(guiProps.bexConfigCheckboxes) > 0:
             col = layout.box().column(align=True)
-            for item in context.scene.armaExportConfigs.exportConfigs.values():
-                row = col.row()
-                row.alignment = 'LEFT'
-                name = item.name
-                is_enabled = name in guiProps.bex_exportConfigs.keys()
-                row.operator(
-                    "armatoolbox.rem_guiprop_config" if is_enabled else "armatoolbox.add_guiprop_config",
-                    icon='CHECKBOX_HLT' if is_enabled else 'CHECKBOX_DEHLT',
-                    text=name,
-                    emboss=False
-                ).config_name=name
+            for item in guiProps.bexConfigCheckboxes:
+                col.prop(item, "checked", text=item.name)
 
         row = layout.row()
         row.operator("armatoolbox.apply_config_batch", text="Apply")
@@ -870,20 +861,10 @@ class ATBX_PT_export_config_object_panel(bpy.types.Panel):
             row.prop(arma, "inheritConfig", text="Inherit config from collected meshes in addition to this list")
 
         if arma.alwaysExport == False:
-            if context.scene.armaExportConfigs.exportConfigs.keys().__len__() != 0:
+            if len(arma.configCheckboxes) > 0:
                 col = layout.box().column(align=True)
-                for item in context.scene.armaExportConfigs.exportConfigs.values():
-                    row = col.row()
-                    row.alignment = 'LEFT'
-                    name = item.name
-                    is_enabled = name in arma.exportConfigs.keys()
-                    row.operator(
-                        "armatoolbox.rem_obj_config" if is_enabled else "armatoolbox.add_obj_config",
-                        icon='CHECKBOX_HLT' if is_enabled else 'CHECKBOX_DEHLT',
-                        text=name,
-                        emboss=False
-                    ).config_name=name
-
+                for item in arma.configCheckboxes:
+                    col.prop(item, "checked", text=item.name)
 
 class ATBX_PT_vgroup_maker_panel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'

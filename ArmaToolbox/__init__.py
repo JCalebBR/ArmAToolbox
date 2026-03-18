@@ -604,6 +604,10 @@ def register():
     properties.register()
     properties.addCustomProperties()
 
+    from .properties import config_checkbox_depsgraph_handler
+    if config_checkbox_depsgraph_handler not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(config_checkbox_depsgraph_handler)
+
     from . import operators
     operators.register()
 
@@ -672,5 +676,10 @@ def unregister():
     menus.unregister()
     operators.unregister()
     properties.unregister()
+
+    from .properties import config_checkbox_depsgraph_handler
+    if config_checkbox_depsgraph_handler in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(config_checkbox_depsgraph_handler)
+
     for cls in reversed(classes):
         unregister_class(cls)

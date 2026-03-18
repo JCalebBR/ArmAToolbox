@@ -9,6 +9,7 @@ from bpy.props import (
     PointerProperty,
     StringProperty,
 )
+from bpy.app.handlers import persistent
 #from NamedSelections import NamSel_UpdateName
 from . import NamedSelections
 
@@ -159,6 +160,132 @@ class ArmaToolboxCollectedMeshesProperty(bpy.types.PropertyGroup):
 class ArmaToolboxDeletionListProperty(bpy.types.PropertyGroup):
     vname: bpy.props.StringProperty(name="vname", description="Group Name")
 
+
+
+_syncing_checkboxes = False
+
+
+def _update_membership(checkbox_item, membership_coll):
+    """Add or remove a config name from a membership collection."""
+    if checkbox_item.checked:
+        if checkbox_item.name not in membership_coll:
+            membership_coll.add().name = checkbox_item.name
+    else:
+        idx = membership_coll.find(checkbox_item.name)
+        if idx >= 0:
+            membership_coll.remove(idx)
+
+
+def _on_obj_config_changed(self, context):
+    """Update callback for per-object config checkboxes."""
+    if _syncing_checkboxes:
+        return
+    obj = context.active_object
+    if obj is None:
+        return
+    _update_membership(self, obj.armaObjProps.exportConfigs)
+
+
+def _on_bex_config_changed(self, context):
+    """Update callback for batch-operation config checkboxes."""
+    if _syncing_checkboxes:
+        return
+    guiProps = context.window_manager.armaGUIProps
+    _update_membership(self, guiProps.bex_exportConfigs)
+
+
+class ArmaToolboxConfigCheckboxProperty(bpy.types.PropertyGroup):
+    """Per-object export config checkbox (supports drag-select)."""
+    name:    bpy.props.StringProperty()
+    checked: bpy.props.BoolProperty(
+        name="Include", default=False, update=_on_obj_config_changed)
+
+
+class ArmaToolboxBexConfigCheckboxProperty(bpy.types.PropertyGroup):
+    """Batch-operation export config checkbox (supports drag-select)."""
+    name:    bpy.props.StringProperty()
+    checked: bpy.props.BoolProperty(
+        name="Include", default=False, update=_on_bex_config_changed)
+
+
+def sync_config_checkboxes(checkbox_coll, scene_configs, membership_coll):
+    """
+    Rebuild checkbox_coll so it mirrors the scene's export config list,
+    with each checkbox's 'checked' state reflecting membership.
+
+    Returns True if anything was rebuilt (for callers that care).
+    Safe to call from Panel.draw() — does nothing when already in sync.
+    """
+    global _syncing_checkboxes
+
+    member_names = set(membership_coll.keys())
+
+    needs_rebuild = (len(checkbox_coll) != len(scene_configs))
+    if not needs_rebuild:
+        for i, cfg_name in enumerate(scene_configs.keys()):
+            if i >= len(checkbox_coll) or checkbox_coll[i].name != cfg_name:
+                needs_rebuild = True
+                break
+            if checkbox_coll[i].checked != (cfg_name in member_names):
+                needs_rebuild = True
+                break
+
+    if not needs_rebuild:
+        return False
+
+    _syncing_checkboxes = True
+    try:
+        checkbox_coll.clear()
+        for cfg_name in scene_configs.keys():
+            item = checkbox_coll.add()
+            item.name = cfg_name
+            item.checked = (cfg_name in member_names)
+    finally:
+        _syncing_checkboxes = False
+
+    return True
+
+_handler_guard = False
+
+@persistent
+def config_checkbox_depsgraph_handler(scene, depsgraph):
+    """Sync config checkboxes outside of draw() where writes are allowed."""
+    global _handler_guard
+    if _handler_guard or _syncing_checkboxes:
+        return
+
+    scene_configs = scene.armaExportConfigs.exportConfigs
+    if len(scene_configs) == 0:
+        return
+
+    _handler_guard = True
+    try:
+        # Sync active object's per-object checkboxes
+        try:
+            obj = bpy.context.view_layer.objects.active
+        except:
+            obj = None
+
+        if (obj is not None
+                and hasattr(obj, 'armaObjProps')
+                and obj.armaObjProps.isArmaObject):
+            arma = obj.armaObjProps
+            sync_config_checkboxes(
+                arma.configCheckboxes, scene_configs, arma.exportConfigs
+            )
+
+        # Sync batch-operation checkboxes
+        try:
+            guiProps = bpy.context.window_manager.armaGUIProps
+            sync_config_checkboxes(
+                guiProps.bexConfigCheckboxes, scene_configs,
+                guiProps.bex_exportConfigs
+            )
+        except:
+            pass
+    finally:
+        _handler_guard = False
+
 class ArmaToolboxProperties(bpy.types.PropertyGroup):
     isArmaObject : bpy.props.BoolProperty(
         name = "IsArmaObject",
@@ -241,6 +368,10 @@ class ArmaToolboxProperties(bpy.types.PropertyGroup):
         type = ArmaToolboxDeletionListProperty,
         description = "Object Capture List")
     collectedMeshesDeleteIndex : bpy.props.IntProperty("collectedMeshesDeleteIndex", default = -1)
+
+    # Config checkbox mirror for drag-selectable UI (synced with exportConfigs)
+    configCheckboxes: bpy.props.CollectionProperty(
+        type=ArmaToolboxConfigCheckboxProperty)
 
     
 class ArmaToolboxMaterialProperties(bpy.types.PropertyGroup):
@@ -472,6 +603,11 @@ class ArmaToolboxGUIProps(bpy.types.PropertyGroup):
         description="Vertex Groups to delete, empty for none, multiple with comma",
         default="")
 
+    # Config checkbox mirror for drag-selectable batch UI (synced with bex_exportConfigs)
+    bexConfigCheckboxes: bpy.props.CollectionProperty(
+        type=ArmaToolboxBexConfigCheckboxProperty)
+
+
 class ArmaToolboxCopyHelper(bpy.types.PropertyGroup):
     name : bpy.props.StringProperty(name="name", 
         description = "Name")
@@ -543,6 +679,7 @@ class ArmaToolboxFixShadowsHelper(bpy.types.PropertyGroup):
         description = "Object Name")
     fixThis : bpy.props.BoolProperty(name="fixThis",
         description="Fix") 
+    
 
 prpclasses = (
     ArmaToolboxDeletionListProperty,
@@ -555,6 +692,8 @@ prpclasses = (
     ArmaToolboxComponentProperty,
     ArmaToolboxProxyProperty,
     ArmaToolboxHeightfieldProperties,
+    ArmaToolboxConfigCheckboxProperty,
+    ArmaToolboxBexConfigCheckboxProperty,
     ArmaToolboxProperties,
     ArmaToolboxMaterialProperties,
     ArmaToolboxRenamableProperty,
