@@ -1,7 +1,5 @@
 import bpy
 from bpy_extras.io_utils import ImportHelper, ExportHelper
-#from ArmaTools import GetObjectsByConfig, RunO2Script
-#from MDLexporter import exportObjectListAsMDL
 from . import (
     ArmaTools,
     MDLExporter
@@ -9,8 +7,15 @@ from . import (
 import os.path as path
 import sys
 
+
 class ArmaToolboxBatchExportConfigProperty(bpy.types.PropertyGroup):
-    name : bpy.props.StringProperty(name="name", description = "Name of the config")
+    name: bpy.props.StringProperty(name="name", description="Name of the config")
+    export_it: bpy.props.BoolProperty(name="Export", default=True, description="Include in batch export")
+
+class ATBX_UL_batch_export_checkboxes_list(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        # Draws the checkbox using the 'export_it' property
+        layout.prop(item, "export_it", text=item.name)
 
 
 class ATBX_PT_batch_export_configs(bpy.types.Panel):
@@ -23,35 +28,29 @@ class ATBX_PT_batch_export_configs(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-       
         return operator.bl_idname == "ARMATOOLBOX_OT_batch_export_p3d"
-
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        layout.use_property_decorate = False  # No animation.
+        layout.use_property_decorate = False
 
         sfile = context.space_data
         operator = sfile.active_operator
-        prp = operator.configs
 
-        if context.scene.armaExportConfigs.exportConfigs.keys().__len__() != 0:
+        if len(operator.configs) > 0:
             row = layout.row()
             row.operator("armatoolbox.select_config", text="All").allNone = True
             row.operator("armatoolbox.select_config", text="None").allNone = False
-            col = layout.box().column(align=True)
-            for item in context.scene.armaExportConfigs.exportConfigs.values():
-                row = col.row()
-                row.alignment = 'LEFT'
-                name = item.name
-                is_enabled = name in prp.keys()
-                row.operator(
-                    "armatoolbox.rem_exp_config" if is_enabled else "armatoolbox.add_exp_config",
-                    icon='CHECKBOX_HLT' if is_enabled else 'CHECKBOX_DEHLT',
-                    text=name,
-                    emboss=False
-                ).config_name = name
+
+            row = layout.row()
+            row.template_list(
+                "ATBX_UL_batch_export_checkboxes_list", "",
+                operator, "configs",
+                operator, "configs_index",
+                rows=8 # Sets the height of the scrollbar window
+            )
+
 
 class ATBX_PT_batch_export_options(bpy.types.Panel):
     bl_space_type = 'FILE_BROWSER'
@@ -63,13 +62,12 @@ class ATBX_PT_batch_export_options(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-
         return operator.bl_idname == "ARMATOOLBOX_OT_batch_export_p3d"
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        layout.use_property_decorate = False  # No animation.
+        layout.use_property_decorate = False
 
         sfile = context.space_data
         operator = sfile.active_operator
@@ -78,38 +76,6 @@ class ATBX_PT_batch_export_options(bpy.types.Panel):
         layout.prop(operator, "applyModifiers")
         layout.prop(operator, "applyTransforms")
 
-# Operators
-class ATBX_OT_add_exp_config(bpy.types.Operator):
-    bl_idname = "armatoolbox.add_exp_config"
-    bl_label = ""
-    bl_description = "Add an export config to export"
-
-    config_name: bpy.props.StringProperty(name="config_name")
-
-    def execute(self, context):
-        sfile = context.space_data
-        operator = sfile.active_operator
-        prp = operator.configs
-        item = prp.add()
-        item.name = self.config_name
-        return {"FINISHED"}
-
-
-class ATBX_OT_rem_exp_config(bpy.types.Operator):
-    bl_idname = "armatoolbox.rem_exp_config"
-    bl_label = ""
-    bl_description = "Remove an export config from export"
-
-    config_name: bpy.props.StringProperty(name="config_name")
-
-    def execute(self, context):
-        sfile = context.space_data
-        operator = sfile.active_operator
-        prp = operator.configs
-        active = prp.keys().index(self.config_name)
-        if active != -1:
-            prp.remove(active)
-        return {"FINISHED"}
 
 class ATBX_OT_select_config(bpy.types.Operator):
     bl_idname = "armatoolbox.select_config"
@@ -121,46 +87,64 @@ class ATBX_OT_select_config(bpy.types.Operator):
     def execute(self, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        prp = operator.configs
 
-        prp.clear()
+        for item in operator.configs:
+            item.export_it = self.allNone
 
-        if self.allNone:
-            for item in context.scene.armaExportConfigs.exportConfigs.values():
-                x = prp.add()
-                x.name = item.name
+        # Keep preset_memory in sync so the next "Save Preset" captures this
+        current_active = [c.name for c in operator.configs if c.export_it]
+        operator.preset_memory = "||".join(current_active)
+        operator.last_memory = operator.preset_memory
+
         return {"FINISHED"}
 
-class ATBX_OT_p3d_batch_export(bpy.types.Operator): #, ExportHelper):
+
+class ATBX_OT_p3d_batch_export(bpy.types.Operator):
     """Batch-Export P3D configs"""
     bl_idname = "armatoolbox.batch_export_p3d"
     bl_label = "Batch Export as P3D"
-    #bl_description = "Batch Export as P3D"
     bl_options = {'PRESET', 'UNDO'}
 
-    directory : bpy.props.StringProperty(
+    directory: bpy.props.StringProperty(
         name="Outdir Path",
         description="Where I will save my stuff",
         subtype='DIR_PATH'
     )
 
-    configs : bpy.props.CollectionProperty(
-        description = "Configs to export",
+    configs: bpy.props.CollectionProperty(
+        description="Configs to export",
         type=ArmaToolboxBatchExportConfigProperty,
-        options={'HIDDEN'}
+        options={'HIDDEN'}  
+    )
+    
+    configs_index: bpy.props.IntProperty(
+        name="Configs Index",
+        default=0,
+        options={'HIDDEN', 'SKIP_SAVE'}
     )
 
-    renumberComponents : bpy.props.BoolProperty(
-        name = "Re-Number Components",
-        description = "Re-Number Geometry Components",
-        default = True
+    preset_memory: bpy.props.StringProperty(
+        name="Preset Memory",
+        default="",
     )
 
-    applyModifiers : bpy.props.BoolProperty(
-        name = "Apply Modifiers",
-        description = "Apply modifiers before exporting",
-        default = True
+    last_memory: bpy.props.StringProperty(
+        default="",
+        options={'HIDDEN', 'SKIP_SAVE'}
     )
+
+    renumberComponents: bpy.props.BoolProperty(
+        name="Re-Number Components",
+        description="Re-Number Geometry Components",
+        default=True
+    )
+
+    applyModifiers: bpy.props.BoolProperty(
+        name="Apply Modifiers",
+        description="Apply modifiers before exporting",
+        default=True
+    )
+
     applyTransforms: bpy.props.BoolProperty(
         name="Apply all transforms",
         description="Apply rotation, scale, and position transforms before exporting",
@@ -172,75 +156,113 @@ class ATBX_OT_p3d_batch_export(bpy.types.Operator): #, ExportHelper):
 
     @classmethod
     def poll(cls, context):
-        return context.scene.armaExportConfigs.exportConfigs.keys().__len__() != 0
+        return len(context.scene.armaExportConfigs.exportConfigs.keys()) != 0
 
-    def invoke(self, context, event):
-        if len(self.configs) == 0:
-            for item in context.scene.armaExportConfigs.exportConfigs.values():
+    def check(self, context):
+        scene_configs = context.scene.armaExportConfigs.exportConfigs
+        needs_redraw = False
+
+        is_synced = True
+        if len(self.configs) != len(scene_configs):
+            is_synced = False
+        else:
+            for i, item in enumerate(scene_configs.values()):
+                if self.configs[i].name != item.name:
+                    is_synced = False
+                    break
+
+        if not is_synced:
+            self.configs.clear()
+            for item in scene_configs.values():
                 x = self.configs.add()
                 x.name = item.name
+                x.export_it = True
+            needs_redraw = True
+
+        if self.preset_memory != self.last_memory:
+            active_names = (
+                set(self.preset_memory.split("||")) if self.preset_memory else set()
+            )
+            for c in self.configs:
+                c.export_it = c.name in active_names
+            self.last_memory = self.preset_memory
+            needs_redraw = True
+
+        current_active = [c.name for c in self.configs if c.export_it]
+        new_memory = "||".join(current_active)
+
+        if self.preset_memory != new_memory:
+            self.preset_memory = new_memory
+            self.last_memory = new_memory
+            needs_redraw = True
+
+        return needs_redraw
+
+    def invoke(self, context, event):
+        # Start fresh every time the dialog opens
+        self.configs.clear()
+        self.preset_memory = ""
+        self.last_memory = ""
+        self.check(context)
 
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        print("Cleaning...")
-        bpy.data.orphans_purge(do_recursive=True)
-        print("Cleaned")
-        import traceback 
-        
-        if context.view_layer.objects.active == None and len(context.view_layer.objects) > 0:
+        import traceback
+
+        if context.view_layer.objects.active is None and len(context.view_layer.objects) > 0:
             context.view_layer.objects.active = context.view_layer.objects[0]
-            
-        # Create an empty list to track successfully exported models
+
         exported_files = []
-            
+
         for item in self.configs:
+            if not item.export_it:
+                continue
+
             objs = ArmaTools.GetObjectsByConfig(item.name)
             print("Config: " + item.name)
-            
+
             if not objs:
                 print(f"Warning: No objects found for config {item.name}, skipping.")
                 continue
-                
+
             config = context.scene.armaExportConfigs.exportConfigs[item.name]
             fileName = path.join(self.directory, config.fileName)
-            
+
             try:
-                # Export the geometry directly from Blender
                 with open(fileName, "wb") as filePtr:
                     context.view_layer.objects.active = objs[0]
-                    MDLExporter.exportObjectListAsMDL(self, filePtr, self.applyModifiers, True, objs,
-                                        self.renumberComponents, self.applyTransforms, config.originObject)
-                                        
-                # If successful, add to our bulk processing list instead of running Wine here
+                    MDLExporter.exportObjectListAsMDL(
+                        self, filePtr, self.applyModifiers, True, objs,
+                        self.renumberComponents, self.applyTransforms,
+                        config.originObject
+                    )
                 exported_files.append(fileName)
-                
+
             except Exception as inst:
                 print(f"--- BATCH EXPORT CRASH ON {item.name} ---")
-                traceback.print_exc() 
+                traceback.print_exc()
                 error_msg = f"Error writing file {fileName} for config {item.name}"
                 self.report({'ERROR'}, error_msg)
                 return {'CANCELLED'}
-        
-        # Once the loop is finished, hand the entire list to Wine at once
+
         if exported_files:
             print(f"Batch Exporting {len(exported_files)} files to O2Script...")
             ArmaTools.RunO2Script(context, exported_files)
-            
+
         return {'FINISHED'}
 
-    def draw(self, context):
-        pass
 
 clses = (
     # Properties
     ArmaToolboxBatchExportConfigProperty,
+    
+    #UI List
+    ATBX_UL_batch_export_checkboxes_list,
 
     # Operators
     ATBX_OT_p3d_batch_export,
-    ATBX_OT_add_exp_config,
-    ATBX_OT_rem_exp_config,
     ATBX_OT_select_config,
 
     # Panels
@@ -248,18 +270,16 @@ clses = (
     ATBX_PT_batch_export_options
 )
 
+
 def register():
     print("BatchMDLExport register")
-
     from bpy.utils import register_class
-
     for cs in clses:
         register_class(cs)
 
+
 def unregister():
     print("BatchMDLExport unregister")
-    
     from bpy.utils import unregister_class
-    
     for cs in clses:
         unregister_class(cs)
