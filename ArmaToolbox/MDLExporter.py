@@ -943,7 +943,7 @@ class ATBX_PT_p3d_export_options(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
         
-        return operator.bl_idname == "EXPORT_SCENE_OT_arma_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_export_p3d"
 
     def draw(self, context):
         layout = self.layout

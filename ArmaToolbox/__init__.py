@@ -290,6 +290,52 @@ class ATBX_OT_asc_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
             
         return{'FINISHED'}
         
+def import_and_nest_p3d(context, filepath, layered_lods):
+    import os
+    import sys
+    from traceback import print_tb
+    
+    col_name = os.path.splitext(os.path.basename(filepath))[0]
+    
+    # Create the master parent collection
+    parent_col = bpy.data.collections.new(col_name)
+    context.scene.collection.children.link(parent_col)
+    
+    # Snapshot of the root outliner
+    root_cols_before_set = set(context.scene.collection.children)
+    root_objs_before_set = set(context.scene.collection.objects)
+    
+    error = -2
+    try:
+        # Run the importer
+        error = MDLImporter.importMDL(context, filepath, layered_lods)
+    except Exception as e:
+        exc_tb = sys.exc_info()[2]
+        print_tb(exc_tb)
+        print(f"I/O error: {e}\n{exc_tb}")
+    finally:
+        # Sweep collections into the parent
+        cols_to_move = []
+        for col in context.scene.collection.children:
+            if col not in root_cols_before_set and col != parent_col:
+                cols_to_move.append(col)
+                
+        for col in cols_to_move:
+            context.scene.collection.children.unlink(col)
+            parent_col.children.link(col)
+            
+        # Sweep loose objects into the parent
+        objs_to_move = []
+        for obj in context.scene.collection.objects:
+            if obj not in root_objs_before_set:
+                objs_to_move.append(obj)
+                
+        for obj in objs_to_move:
+            context.scene.collection.objects.unlink(obj)
+            parent_col.objects.link(obj)
+            
+    return error
+
 ###
 ##   Import Operator
 #
@@ -314,7 +360,7 @@ class ATBX_OT_p3d_import(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
     def execute (self, context):
         error = -2
         try:
-            error = MDLImporter.importMDL(context, self.filepath, self.layeredLods)
+            error = import_and_nest_p3d(context, self.filepath, self.layeredLods)
         except Exception as e:
             exc_tb = sys.exc_info()[2]
             print_tb(exc_tb)
@@ -359,6 +405,17 @@ class ATBX_OT_asc_import(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
             self.report({'WARNING', 'INFO'}, "I/O error: Exception while reading")
 
         return{'FINISHED'}
+    
+class ATBX_FH_p3d_import(bpy.types.FileHandler):
+    bl_idname = "ATBX_FH_p3d_import"
+    bl_label = "File handler for Arma 3 P3D import"
+    bl_import_operator = "import_scene.import_p3d"
+    bl_file_extensions = ".p3d"
+
+    @classmethod
+    def poll_drop(cls, context):
+        # Only trigger if dropped into the 3D Viewport
+        return (context.area and context.area.type == 'VIEW_3D')
         
 def ArmaToolboxExportMenuFunc(self, context):
     self.layout.operator(MDLExporter.ATBX_OT_p3d_export.bl_idname, text="Arma 3 P3D (.p3d)")
@@ -586,7 +643,8 @@ classes = (
     ATBX_OT_p3d_import,
     ATBX_OT_asc_import,
     ATBX_OT_asc_export,
-    ATBX_OT_rtm_export
+    ATBX_OT_rtm_export,
+    ATBX_FH_p3d_import
 )
 
 def ATBX_vp_menu(self, context):

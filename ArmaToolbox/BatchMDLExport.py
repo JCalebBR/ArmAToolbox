@@ -28,7 +28,7 @@ class ATBX_PT_batch_export_configs(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        return operator.bl_idname == "EXPORT_SCENE_OT_arma_batch_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_batch_export_p3d"
 
     def draw(self, context):
         layout = self.layout
@@ -62,7 +62,7 @@ class ATBX_PT_batch_export_options(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        return operator.bl_idname == "EXPORT_SCENE_OT_arma_batch_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_batch_export_p3d"
 
     def draw(self, context):
         layout = self.layout

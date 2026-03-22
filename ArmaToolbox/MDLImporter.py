@@ -7,6 +7,8 @@ Import an Arma 2/Arma 3 unbinarized MDL file
 
 '''
 import struct
+import sys
+from traceback import print_tb
 import bpy
 import bmesh
 import os.path as path
@@ -624,32 +626,32 @@ def importMDL(context, fileName, layerFlag):
                False, False, False, False, False]
     currentLayer = 0
     
-    filePtr = open(fileName, "rb")
-    
-    objName = path.basename(fileName).split(".")[0]
-
     # This is used to collect combinations of texture and rvmat
     # in order to generate Materials
     materialData = {}
+    try:
+        with open(fileName, "rb") as filePtr:
+            objName = path.basename(fileName).split(".")[0]
+            # Read the header
+            sig = readSignature(filePtr)
+            version = readULong(filePtr)
+            numLods = readULong(filePtr)
+        
+            print ("Signature = {0}, version={1}, numLods = {2}".format(sig, version, numLods))
+            
+            if version != 257:
+                return -1
 
-    # Read the header
-    sig = readSignature(filePtr)
-    version = readULong(filePtr)
-    numLods = readULong(filePtr)
-    
-    print ("Signature = {0}, version={1}, numLods = {2}".format(sig, version, numLods))
-    
-    if version != 257:
-        return -1
-
-    if sig != b'MLOD':
-        return -3
-    
-    # Start loading lods
-    for i in range(0,numLods):
-        if loadLOD(context, filePtr, objName, materialData, layerFlag, i) != 0:
-            return -2
-
-    filePtr.close()
-    ArmaTools.allButOneCollection(context)
+            if sig != b'MLOD':
+                return -3
+        
+            # Start loading lods
+            for i in range(0,numLods):
+                if loadLOD(context, filePtr, objName, materialData, layerFlag, i) != 0:
+                    return -2
+            ArmaTools.allButOneCollection(context)
+    except Exception as e:
+        exc_tb = sys.exc_info()[2]
+        print_tb(exc_tb)
+        print(f"I/O error: {e}\n{exc_tb}")
     return 0
