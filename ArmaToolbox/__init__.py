@@ -209,10 +209,10 @@ def getLodPresets():
 
 class ATBX_OT_rtm_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
     """Export RTM Animation file"""
-    bl_idname = "armatoolbox.export_rtm"
+    bl_idname = "export_scene.export_rtm"
     bl_label = "Export as RTM"
     bl_description = "Export an Arma 2/3 RTM Animation file"
-    bl_options = {'PRESET'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
     
     filename_ext = ".rtm"
     filter_glob : bpy.props.StringProperty(
@@ -263,10 +263,10 @@ class ATBX_OT_rtm_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
 #
         
 class ATBX_OT_asc_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
-    bl_idname="armatoolbox.ascexport"
+    bl_idname="export_scene.ascexport"
     bl_label = "Export as ASC"
     bl_description = "Export as ASC"
-    bl_options = {'PRESET'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
     
     filter_glob : bpy.props.StringProperty(
         default="*.p3d",
@@ -295,10 +295,10 @@ class ATBX_OT_asc_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
 #
         
 class ATBX_OT_p3d_import(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
-    bl_idname="armatoolbox.import_p3d"
+    bl_idname="import_scene.import_p3d"
     bl_label = "Import P3D"
     bl_description = "Import P3D"
-    bl_options = {'PRESET'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
     
     filter_glob : bpy.props.StringProperty(
         default="*.p3d",
@@ -332,10 +332,10 @@ class ATBX_OT_p3d_import(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
 
 
 class ATBX_OT_asc_import(bpy.types.Operator, bpy_extras.io_utils.ImportHelper):
-    bl_idname="armatoolbox.importasc"
+    bl_idname="import_scene.importasc"
     bl_label = "Import ASC"
     bl_description = "Import ASC"
-    bl_options = {'PRESET'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
     
     filter_glob : bpy.props.StringProperty(
         default="*.asc",

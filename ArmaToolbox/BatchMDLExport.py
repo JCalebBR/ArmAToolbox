@@ -28,7 +28,7 @@ class ATBX_PT_batch_export_configs(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        return operator.bl_idname == "ARMATOOLBOX_OT_batch_export_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_arma_batch_p3d"
 
     def draw(self, context):
         layout = self.layout
@@ -62,7 +62,7 @@ class ATBX_PT_batch_export_options(bpy.types.Panel):
     def poll(cls, context):
         sfile = context.space_data
         operator = sfile.active_operator
-        return operator.bl_idname == "ARMATOOLBOX_OT_batch_export_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_arma_batch_p3d"
 
     def draw(self, context):
         layout = self.layout
@@ -101,9 +101,9 @@ class ATBX_OT_select_config(bpy.types.Operator):
 
 class ATBX_OT_p3d_batch_export(bpy.types.Operator):
     """Batch-Export P3D configs"""
-    bl_idname = "armatoolbox.batch_export_p3d"
+    bl_idname = "export_scene.batch_export_p3d"
     bl_label = "Batch Export as P3D"
-    bl_options = {'PRESET', 'UNDO'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
 
     directory: bpy.props.StringProperty(
         name="Outdir Path",

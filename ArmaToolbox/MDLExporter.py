@@ -943,7 +943,7 @@ class ATBX_PT_p3d_export_options(bpy.types.Panel):
         sfile = context.space_data
         operator = sfile.active_operator
         
-        return operator.bl_idname == "ARMATOOLBOX_OT_export_p3d"
+        return operator.bl_idname == "EXPORT_SCENE_OT_arma_p3d"
 
     def draw(self, context):
         layout = self.layout
@@ -961,10 +961,10 @@ class ATBX_PT_p3d_export_options(bpy.types.Panel):
         layout.prop(operator, "applyTransforms")
 
 class ATBX_OT_p3d_export(bpy.types.Operator, bpy_extras.io_utils.ExportHelper):
-    bl_idname = "armatoolbox.export_p3d"
+    bl_idname = "export_scene.export_p3d"
     bl_label = "Export as P3D"
     bl_description = "Export as P3D"
-    bl_options = {'PRESET'}
+    bl_options = {'PRESET', 'REGISTER', 'UNDO'}
 
     filter_glob: bpy.props.StringProperty(
         default="*.p3d",
